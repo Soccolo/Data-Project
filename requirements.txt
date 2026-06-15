@@ -1,0 +1,3 @@
+# Streamlit Community Cloud installs from this root requirements file.
+# The app lives in streamlit/ — its dependencies are declared there.
+-r streamlit/requirements.txt
