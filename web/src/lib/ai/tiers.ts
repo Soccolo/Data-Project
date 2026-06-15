@@ -28,7 +28,7 @@ export interface ModelChoice {
 // Routing table. Edit this to tune the tradeoff between cost and quality.
 //
 // Heuristics applied:
-// - free: all Gemini 2.0 Flash. Cheapest path. Quality is fine for most
+// - free: all Gemini 2.5 Flash. Cheapest path. Quality is fine for most
 //   tasks; matching pairs of free-tier Daras will both speak Flash.
 // - pro: Claude Sonnet 4.6 on the personal/sensitive calls the user
 //   reads (interview, intake, score, takeaway). Gemini Flash on the
@@ -38,37 +38,37 @@ export interface ModelChoice {
 //   that benefits from extra nuance.
 const ROUTES: Record<Tier, Record<Purpose, ModelChoice>> = {
   free: {
-    interview:           { provider: 'google',    model: 'gemini-2.0-flash',         label: 'Gemini Flash' },
-    photoAnalysis:       { provider: 'google',    model: 'gemini-2.0-flash',         label: 'Gemini Flash' },
-    compatibilityFilter: { provider: 'google',    model: 'gemini-2.0-flash',         label: 'Gemini Flash' },
-    proxyTurn:           { provider: 'google',    model: 'gemini-2.0-flash',         label: 'Gemini Flash' },
-    score:               { provider: 'google',    model: 'gemini-2.0-flash',         label: 'Gemini Flash' },
-    prescreen:           { provider: 'google',    model: 'gemini-2.0-flash',         label: 'Gemini Flash' },
-    intake:              { provider: 'google',    model: 'gemini-2.0-flash',         label: 'Gemini Flash' },
-    mediation:           { provider: 'google',    model: 'gemini-2.0-flash',         label: 'Gemini Flash' },
-    takeaway:            { provider: 'google',    model: 'gemini-2.0-flash',         label: 'Gemini Flash' },
+    interview:           { provider: 'google',    model: 'gemini-2.5-flash',          label: 'Gemini Flash' },
+    photoAnalysis:       { provider: 'google',    model: 'gemini-2.5-flash',          label: 'Gemini Flash' },
+    compatibilityFilter: { provider: 'google',    model: 'gemini-2.5-flash',          label: 'Gemini Flash' },
+    proxyTurn:           { provider: 'google',    model: 'gemini-2.5-flash',          label: 'Gemini Flash' },
+    score:               { provider: 'google',    model: 'gemini-2.5-flash',          label: 'Gemini Flash' },
+    prescreen:           { provider: 'google',    model: 'gemini-2.5-flash',          label: 'Gemini Flash' },
+    intake:              { provider: 'google',    model: 'gemini-2.5-flash',          label: 'Gemini Flash' },
+    mediation:           { provider: 'google',    model: 'gemini-2.5-flash',          label: 'Gemini Flash' },
+    takeaway:            { provider: 'google',    model: 'gemini-2.5-flash',          label: 'Gemini Flash' },
   },
   pro: {
-    interview:           { provider: 'anthropic', model: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet' },
-    photoAnalysis:       { provider: 'anthropic', model: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet' },
-    compatibilityFilter: { provider: 'google',    model: 'gemini-2.0-flash',           label: 'Gemini Flash' },
-    proxyTurn:           { provider: 'google',    model: 'gemini-2.0-flash',           label: 'Gemini Flash' },
-    score:               { provider: 'anthropic', model: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet' },
-    prescreen:           { provider: 'google',    model: 'gemini-2.0-flash',           label: 'Gemini Flash' },
-    intake:              { provider: 'anthropic', model: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet' },
-    mediation:           { provider: 'google',    model: 'gemini-2.0-flash',           label: 'Gemini Flash' },
-    takeaway:            { provider: 'anthropic', model: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet' },
+    interview:           { provider: 'anthropic', model: 'claude-sonnet-4-6',         label: 'Claude Sonnet' },
+    photoAnalysis:       { provider: 'anthropic', model: 'claude-sonnet-4-6',         label: 'Claude Sonnet' },
+    compatibilityFilter: { provider: 'google',    model: 'gemini-2.5-flash',          label: 'Gemini Flash' },
+    proxyTurn:           { provider: 'google',    model: 'gemini-2.5-flash',          label: 'Gemini Flash' },
+    score:               { provider: 'anthropic', model: 'claude-sonnet-4-6',         label: 'Claude Sonnet' },
+    prescreen:           { provider: 'google',    model: 'gemini-2.5-flash',          label: 'Gemini Flash' },
+    intake:              { provider: 'anthropic', model: 'claude-sonnet-4-6',         label: 'Claude Sonnet' },
+    mediation:           { provider: 'google',    model: 'gemini-2.5-flash',          label: 'Gemini Flash' },
+    takeaway:            { provider: 'anthropic', model: 'claude-sonnet-4-6',         label: 'Claude Sonnet' },
   },
   x: {
-    interview:           { provider: 'anthropic', model: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet' },
-    photoAnalysis:       { provider: 'anthropic', model: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet' },
-    compatibilityFilter: { provider: 'anthropic', model: 'claude-haiku-4-5-20251001',  label: 'Claude Haiku' },
-    proxyTurn:           { provider: 'anthropic', model: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet' },
-    score:               { provider: 'anthropic', model: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet' },
-    prescreen:           { provider: 'anthropic', model: 'claude-haiku-4-5-20251001',  label: 'Claude Haiku' },
-    intake:              { provider: 'anthropic', model: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet' },
-    mediation:           { provider: 'anthropic', model: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet' },
-    takeaway:            { provider: 'anthropic', model: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet' },
+    interview:           { provider: 'anthropic', model: 'claude-sonnet-4-6',         label: 'Claude Sonnet' },
+    photoAnalysis:       { provider: 'anthropic', model: 'claude-sonnet-4-6',         label: 'Claude Sonnet' },
+    compatibilityFilter: { provider: 'anthropic', model: 'claude-haiku-4-5-20251001', label: 'Claude Haiku' },
+    proxyTurn:           { provider: 'anthropic', model: 'claude-sonnet-4-6',         label: 'Claude Sonnet' },
+    score:               { provider: 'anthropic', model: 'claude-sonnet-4-6',         label: 'Claude Sonnet' },
+    prescreen:           { provider: 'anthropic', model: 'claude-haiku-4-5-20251001', label: 'Claude Haiku' },
+    intake:              { provider: 'anthropic', model: 'claude-sonnet-4-6',         label: 'Claude Sonnet' },
+    mediation:           { provider: 'anthropic', model: 'claude-sonnet-4-6',         label: 'Claude Sonnet' },
+    takeaway:            { provider: 'anthropic', model: 'claude-sonnet-4-6',         label: 'Claude Sonnet' },
   },
 };
 
