@@ -61,20 +61,31 @@ def render() -> None:
         _render_match(st.session_state["iv_match"])
         return
 
+    # Once Dara has enough to go on, offer the match — but DON'T return here, so
+    # the chat input below still renders and the user can keep talking if they
+    # want. (The early return that used to live here is what cut the
+    # conversation off.)
     if user_turns >= _MAX_TURNS:
-        st.success("That's enough for me to go on.")
+        st.success("I've got enough to go on whenever you're ready — or keep talking.")
         if st.button("See who Dara found →", use_container_width=True):
             with st.spinner("Talking to other Daras…"):
+                # The scoring request must END ON A USER TURN. Newer Claude
+                # models reject a conversation that ends on an assistant message
+                # (no assistant prefill), and the transcript ends with Dara's
+                # last question — so append an explicit "score it now" turn.
+                score_history = msgs + [{
+                    "role": "user",
+                    "content": "Based on everything I've shared, give me the compatibility verdict now.",
+                }]
                 raw, err = _ask(
                     purpose="score", system_prompt=_SCORE_SYSTEM, tier=current_tier(),
-                    history=msgs, schema=schemas.SCORE, max_tokens=700,
+                    history=score_history, schema=schemas.SCORE, max_tokens=700,
                 )
             if err:
                 st.error(f"Couldn't score the match: {err}")
                 return
             st.session_state["iv_match"] = schemas.normalize_score(raw)
             st.rerun()
-        return
 
     prompt = st.chat_input("Tell Dara…")
     if prompt:
