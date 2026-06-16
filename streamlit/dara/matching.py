@@ -249,6 +249,108 @@ def find_match(*, conversation: Optional[List[Dict[str, str]]] = None, tier: Tie
     return result
 
 
+def find_matches(*, conversation: Optional[List[Dict[str, str]]] = None, tier: Tier = "free",
+                 client: Any = None, me: Optional[Dict[str, Any]] = None, n: int = 1,
+                 exclude_ids=None, on_progress=None) -> List[Dict[str, Any]]:
+    """Find up to ``n`` candidates and run the proxy + score for each. Returns a
+    list of match results (same shape as find_match). ``exclude_ids`` skips people
+    already suggested/connected. ``on_progress(i, total, result)`` fires per match."""
+    me = dict(me or {})
+    prefs = {**prefs_mod.default_preferences(), **((me.get("profile") or {}).get("preferences") or {})}
+    me_portrait = get_or_build_portrait(me, conversation, tier, client)
+    me["profile"] = {**(me.get("profile") or {}), "portrait": me_portrait}
+    me_name = (me.get("basics") or {}).get("name", "You")
+
+    candidates = _gather_candidates(client, me, prefs, max(1, n), set(exclude_ids or []))
+    results: List[Dict[str, Any]] = []
+    for i, (candidate, source) in enumerate(candidates):
+        candidate = dict(candidate)
+        candidate["profile"] = {**(candidate.get("profile") or {}), "portrait": _ensure_portrait(candidate)}
+        transcript = run_proxy(me, candidate, tier=tier, turns_each=PROXY_TURNS_EACH_SIDE)
+        photo_fit = _analyze_photos(client, candidate, prefs, tier)
+        result = _score(transcript, me, prefs, candidate, photo_fit, tier)
+        result.update({
+            "candidate": candidate, "photo_fit": photo_fit, "transcript": transcript,
+            "source": source, "simulated": source != "real", "me_name": me_name,
+        })
+        results.append(result)
+        if on_progress:
+            try:
+                on_progress(i + 1, len(candidates), result)
+            except Exception:  # noqa: BLE001
+                pass
+    return results
+
+
+def _gather_candidates(client, me, prefs, n, exclude):
+    """Up to n (candidate, source) pairs — real users first, then seed personas,
+    then a simulated one only if nothing else turned up."""
+    out: List[tuple] = []
+    seen = set(exclude)
+    if client is not None and me.get("id"):
+        try:
+            for r in _find_candidates(client, me, prefs, n, seen):
+                if len(out) >= n:
+                    break
+                out.append((r, "real"))
+                seen.add(r.get("id"))
+        except Exception:  # noqa: BLE001
+            pass
+    if len(out) < n:
+        for s in _pick_seeds(prefs, n - len(out), seen):
+            out.append((s, "seed"))
+            seen.add(s.get("id"))
+    if not out:
+        out.append((_simulated_candidate(prefs), "simulated"))
+    return out[:n]
+
+
+def _find_candidates(client: Any, me: Dict[str, Any], prefs: Dict[str, Any],
+                     limit: int, exclude: set) -> List[Dict[str, Any]]:
+    me_id = me.get("id")
+    my_gender = (me.get("basics") or {}).get("gender")
+    rows = (client.table("users").select("*")
+            .neq("id", me_id).in_("kind", ["dating", "both"]).limit(80).execute()).data or []
+
+    passed: set = set()
+    try:
+        sres = client.table("user_state").select("passed_ids").eq("user_id", me_id).limit(1).execute()
+        if sres.data:
+            passed = set(sres.data[0].get("passed_ids") or [])
+    except Exception:  # noqa: BLE001
+        pass
+    skip = set(exclude) | passed | _connected_ids(client, me_id)
+
+    ranked: List[tuple] = []
+    for r in rows:
+        if r.get("id") in skip:
+            continue
+        if not _matches_prefs(r.get("basics") or {}, prefs):
+            continue
+        their_want = prefs_mod.wanted_genders((r.get("profile") or {}).get("preferences") or {})
+        mutual = (not my_gender) or (my_gender in their_want)
+        ranked.append((0 if mutual else 1, r))
+
+    _rng.shuffle(ranked)               # variety within a rank…
+    ranked.sort(key=lambda t: t[0])    # …but mutual-interest first
+    out: List[Dict[str, Any]] = []
+    for _, r in ranked[:limit]:
+        r = dict(r)
+        try:
+            r["_photos"] = profile_service.list_photos(client, r["id"])
+        except Exception:  # noqa: BLE001
+            r["_photos"] = []
+        out.append(r)
+    return out
+
+
+def _pick_seeds(prefs: Dict[str, Any], k: int, exclude: set) -> List[Dict[str, Any]]:
+    pool = [c for c in seed_mod.seed_candidates()
+            if _matches_prefs(c.get("basics") or {}, prefs) and c.get("id") not in exclude]
+    _rng.shuffle(pool)
+    return pool[:max(0, k)]
+
+
 def _choose_candidate(client, me, prefs):
     if client is not None and me.get("id"):
         try:
