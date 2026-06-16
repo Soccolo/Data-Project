@@ -10,6 +10,7 @@ from __future__ import annotations
 import streamlit as st
 
 from dara import matching, meets
+from dara import profile as profile_service
 from . import session
 from .common import current_tier, go, rule
 
@@ -73,8 +74,8 @@ def _list() -> None:
     cards = []
     if client and uid:
         for m in meets.matches(client, uid):
-            _, oname = meets.other_party(m, uid)
-            cards.append({"kind": "real", "id": m["id"], "name": oname})
+            oid, oname = meets.other_party(m, uid)
+            cards.append({"kind": "real", "id": m["id"], "other_id": oid, "name": oname})
     for cid, sm in (st.session_state.get("seed_matches") or {}).items():
         cards.append({
             "kind": "seed", "id": cid, "candidate": sm["candidate"],
@@ -86,11 +87,72 @@ def _list() -> None:
         st.caption("No matches yet. Find someone in the interview, then tap Connect.")
         return
     for c in cards:
+        basics, photo_url = _person_brief(client, c)
         with st.container(border=True):
-            st.write(f"**{c['name']}**" + ("  ·  _test persona_" if c["kind"] == "seed" else ""))
+            left, right = st.columns([1, 4])
+            with left:
+                if photo_url:
+                    st.image(photo_url, use_container_width=True)
+                else:
+                    st.markdown("## ✨")
+            with right:
+                st.markdown(f"**{c['name']}**" + ("  ·  _test persona_" if c["kind"] == "seed" else ""))
+                bits = _detail_bits(basics)
+                if bits:
+                    st.caption(bits)
             if st.button("Open chat", key=f"open_{c['kind']}_{c['id']}", use_container_width=True):
                 st.session_state["match_open"] = c
                 st.rerun()
+
+
+# ─── Person card helpers ─────────────────────────────────────────────
+def _detail_bits(basics: dict) -> str:
+    bits = []
+    if basics.get("age"):
+        bits.append(str(basics["age"]))
+    if basics.get("job"):
+        bits.append(basics["job"])
+    if basics.get("nationality"):
+        bits.append(basics["nationality"])
+    return "  ·  ".join(bits)
+
+
+def _person_brief(client, card: dict):
+    """(basics, photo_url) for a match card — fetched for real users, taken from
+    the candidate for seed personas (which have no photos)."""
+    if card.get("kind") == "seed":
+        return (card.get("candidate") or {}).get("basics") or {}, None
+    basics, photo_url = {}, None
+    oid = card.get("other_id")
+    if client and oid:
+        try:
+            basics = (profile_service.get_profile(client, oid) or {}).get("basics") or {}
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            photos = profile_service.list_photos(client, oid)
+            if photos:
+                photo_url = photos[0].get("signed_url")
+        except Exception:  # noqa: BLE001
+            pass
+    return basics, photo_url
+
+
+def _person_header(name: str, basics: dict, photo_url) -> None:
+    if photo_url:
+        left, right = st.columns([1, 3])
+        with left:
+            st.image(photo_url, use_container_width=True)
+        box = right
+    else:
+        box = st.container()
+    with box:
+        st.markdown(f"### {name}")
+        bits = _detail_bits(basics)
+        if bits:
+            st.caption(bits)
+        if basics.get("bio"):
+            st.write(basics["bio"])
 
 
 # ─── Chat ────────────────────────────────────────────────────────────
@@ -98,7 +160,10 @@ def _chat(c: dict) -> None:
     if st.button("← Matches"):
         st.session_state.pop("match_open", None)
         st.rerun()
-    st.subheader(c["name"])
+
+    basics, photo_url = _person_brief(_client(), c)
+    _person_header(c["name"], basics, photo_url)
+    st.divider()
 
     if c["kind"] == "seed":
         _seed_chat(c)
