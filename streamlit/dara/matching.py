@@ -63,8 +63,9 @@ _PORTRAIT_SYSTEM = (
     "extraversion, agreeableness, and neuroticism — an impression from how they "
     "express themselves, not a clinical assessment. "
     "Record ONLY what they actually stated — never specialise or fill gaps. If they "
-    "said 'actuary' but not the field, keep 'actuary'; do NOT upgrade it to 'pensions "
-    "actuary' or any specific guess. Leave unknowns out entirely, and let the "
+    "said 'actuary' but not the field, keep 'actuary'; if they said they're doing a "
+    "'PhD' but not in what, keep 'PhD' — never guess the field (do NOT turn it into "
+    "'pensions actuary' or 'PhD in psychology'). Leave unknowns out entirely, and let the "
     "recent_messages invent no concrete facts. Ground everything in what they said."
 )
 
@@ -165,10 +166,11 @@ def _proxy_system(portrait, my_basics, their_basics, total_turns, conversation) 
         "ANTI-HALLUCINATION (critical): only state facts explicitly given above. NEVER "
         "guess specifics you weren't told — not your employer, neighbourhood, friends, "
         "trips, NOR a narrower version of something general. If you're 'an actuary' and "
-        "they ask what kind, you genuinely DO NOT know — do not pick one. When asked "
-        "anything you don't know, playfully deferring IS the correct answer: 'ha, let's "
-        f"keep that for when we actually meet' or 'i'll tell you in person' — in {name}'s "
-        f"voice. Guessing breaks trust when {name} reads this transcript.\n"
+        "they ask what kind — or you're 'doing a PhD' and they ask the field — you "
+        "genuinely DO NOT know unless it's stated above; do not pick one ('psychology', "
+        "'pensions'). When asked anything you don't know, playfully deferring IS the "
+        "correct answer: 'ha, let's keep that for when we actually meet' or 'i'll tell "
+        f"you in person' — in {name}'s voice. Guessing breaks trust when {name} reads this transcript.\n"
         f"You have ~{total_turns} total messages. Be efficient.\n\n"
         f"Conversation so far:\n{convo_block}\n\n"
         'Output strict JSON: {"message": "your next message in voice"}'
