@@ -261,7 +261,7 @@ def find_matches(*, conversation: Optional[List[Dict[str, str]]] = None, tier: T
     me["profile"] = {**(me.get("profile") or {}), "portrait": me_portrait}
     me_name = (me.get("basics") or {}).get("name", "You")
 
-    candidates = _gather_candidates(client, me, prefs, max(1, n), set(exclude_ids or []))
+    candidates = _gather_candidates(client, me, prefs, max(1, n), set(exclude_ids or []), tier)
     results: List[Dict[str, Any]] = []
     for i, (candidate, source) in enumerate(candidates):
         candidate = dict(candidate)
@@ -282,18 +282,52 @@ def find_matches(*, conversation: Optional[List[Dict[str, str]]] = None, tier: T
     return results
 
 
-def _gather_candidates(client, me, prefs, n, exclude):
+def _physical_ok(client: Any, candidate: Dict[str, Any], physical_prefs: str, tier: Tier) -> bool:
+    """Whether a candidate's photos are consistent with the user's stated physical
+    wants. Soft by design: no photos or an unclear read never disqualifies."""
+    photos = candidate.get("_photos") or []
+    media: List[Dict[str, str]] = []
+    if client is not None and photos:
+        for p in photos[:2]:
+            data = profile_service.download_photo_bytes(client, p.get("storage_path", ""))
+            if data:
+                media.append({"mediaType": p.get("media_type", "image/jpeg"),
+                              "base64": base64.b64encode(data).decode()})
+    if not media:
+        return True  # can't see them → don't disqualify
+    system = (
+        "You are checking whether a dating candidate's photos are consistent with what the "
+        "user is looking for physically. Judge ONLY visible, non-protected attributes the "
+        "user named (hair length/colour, build, height impression, style). NEVER infer "
+        "ethnicity, nationality, age, or anything protected. If the photos are unclear or "
+        "the trait isn't visible, answer meets=true. Return JSON: meets (bool), reason."
+    )
+    try:
+        raw = call_ai(purpose="photoAnalysis", system_prompt=system, tier=tier,
+                      user_text=f"The user is looking for: {physical_prefs}",
+                      media=media, schema=schemas.PHYSICAL, max_tokens=150)
+        return bool(schemas.normalize_physical(raw).get("meets", True))
+    except Exception:  # noqa: BLE001
+        return True
+
+
+def _gather_candidates(client, me, prefs, n, exclude, tier: Tier = "free"):
     """Up to n (candidate, source) pairs — real users first, then seed personas,
-    then a simulated one only if nothing else turned up."""
+    then a simulated one only if nothing else turned up. When physical wants are
+    set, over-gather real users and drop those whose photos clearly don't fit."""
+    physical = (prefs.get("physical_prefs") or "").strip()
+    pool_n = min(n * 3, 9) if physical else n
     out: List[tuple] = []
     seen = set(exclude)
     if client is not None and me.get("id"):
         try:
-            for r in _find_candidates(client, me, prefs, n, seen):
+            for r in _find_candidates(client, me, prefs, pool_n, seen):
                 if len(out) >= n:
                     break
-                out.append((r, "real"))
                 seen.add(r.get("id"))
+                if physical and not _physical_ok(client, r, physical, tier):
+                    continue
+                out.append((r, "real"))
         except Exception:  # noqa: BLE001
             pass
     if len(out) < n:
