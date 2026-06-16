@@ -113,6 +113,12 @@ def mock_response(
         )
 
     if purpose == "photoAnalysis":
+        if schema:
+            return json.dumps({
+                "impression": "Warm, candid, outdoorsy — looks relaxed and approachable.",
+                "vibe_tags": ["outdoorsy", "warm", "easygoing", "active"],
+                "fit_comment": "The laid-back, active energy reads as a good fit for what you described.",
+            })
         return "Warm, candid, outdoorsy. Reads as approachable and a little adventurous."
 
     # Fallback
