@@ -1,0 +1,12 @@
+[theme]
+# Dara's palette: two colours meeting in the middle (matchmaking + mediation).
+# The rose→iris gradient itself lives in CSS; these are the solid anchors
+# Streamlit uses for widgets, focus rings, and surfaces.
+primaryColor = "#6D5EF6"            # iris — interactive accent / focus
+backgroundColor = "#FCFBFF"          # cool white canvas
+secondaryBackgroundColor = "#F3F0FF" # soft lavender for cards, sidebar, inputs
+textColor = "#1F1633"                # deep plum ink
+font = "sans serif"
+
+[client]
+showErrorDetails = true
