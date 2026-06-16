@@ -12,8 +12,11 @@ import streamlit as st
 from dara import matching, meets
 from dara import conflicts
 from dara import profile as profile_service
+from dara import tiers
 from . import session
 from .common import current_tier, go, rule
+
+_PER_SEARCH = 3  # matches generated per "Search" click (caps per-click cost)
 
 
 def _client():
@@ -41,6 +44,11 @@ def render() -> None:
 # ─── List ────────────────────────────────────────────────────────────
 def _list() -> None:
     client, uid = _client(), session.user_id()
+    me = session.current_profile() or {}
+
+    if client and uid:
+        _search_section(client, me, uid)
+        _suggestions_section(client, me, uid)
 
     if client and uid:
         reqs = meets.incoming_requests(client, uid)
@@ -186,6 +194,150 @@ def _person_header(name: str, basics: dict, photo_url) -> None:
             st.caption(bits)
         if basics.get("bio"):
             st.write(basics["bio"])
+
+
+# ─── Find matches (tier-based daily search) ──────────────────────────
+def _has_portrait(me: dict) -> bool:
+    return bool(((me.get("profile") or {}).get("portrait") or {}).get("speech_notes"))
+
+
+def _search_section(client, me, uid) -> None:
+    tier = current_tier()
+    limit = tiers.daily_match_limit(tier)
+    used = profile_service.match_usage(client, uid)
+    remaining = None if limit is None else max(0, limit - used)
+
+    with st.container(border=True):
+        st.subheader("Find matches")
+        if not _has_portrait(me):
+            st.caption("Do an interview first so Dara knows who to look for.")
+            if st.button("Start an interview →", type="primary", use_container_width=True):
+                go("interview")
+            return
+        if remaining is None:
+            st.caption(f"{tier.upper()} plan · unlimited matches")
+        else:
+            st.caption(f"{tier.capitalize()} plan · {remaining} of {limit} left today")
+        if remaining == 0:
+            st.info("You've used today's matches. Check back tomorrow, or upgrade for more.")
+        elif st.button("Search for matches", type="primary", use_container_width=True):
+            _run_search(client, me, uid, tier, limit, used)
+
+    if st.session_state.pop("auto_search", False) and _has_portrait(me) and remaining != 0:
+        _run_search(client, me, uid, tier, limit, used)
+
+
+def _run_search(client, me, uid, tier, limit, used) -> None:
+    n = _PER_SEARCH if limit is None else min(_PER_SEARCH, max(0, limit - used))
+    if n <= 0:
+        return
+    existing = profile_service.load_suggestions(client, uid)
+    exclude = {x for x in ((s.get("candidate") or {}).get("id") for s in existing) if x}
+
+    progress = st.progress(0.0, text="Dara is meeting people…")
+
+    def _on_prog(i, total, _result):
+        progress.progress(i / total, text=f"Dara met {i} of {total}…")
+
+    try:
+        results = matching.find_matches(
+            conversation=None, tier=tier, client=client, me=me, n=n,
+            exclude_ids=exclude, on_progress=_on_prog,
+        )
+    except Exception as e:  # noqa: BLE001
+        progress.empty()
+        st.error(f"Search failed: {e}")
+        return
+    progress.empty()
+    if not results:
+        st.info("No new people to meet right now — check back as more users join.")
+        return
+    profile_service.save_suggestions(client, uid, existing + [_suggestion_from_result(r) for r in results])
+    profile_service.record_matches(client, uid, len(results))
+    st.rerun()
+
+
+def _suggestion_from_result(r: dict) -> dict:
+    c = r.get("candidate") or {}
+    return {
+        "candidate": {
+            "id": c.get("id"), "username": c.get("username"),
+            "basics": c.get("basics") or {}, "is_seed": bool(c.get("is_seed")),
+            "profile": {"portrait": (c.get("profile") or {}).get("portrait")},
+        },
+        "source": r.get("source"), "transcript": r.get("transcript") or [],
+        "score": r.get("score"), "verdict": r.get("verdict"),
+        "reasons": r.get("reasons") or [], "me_name": r.get("me_name", "You"),
+    }
+
+
+def _suggestions_section(client, me, uid) -> None:
+    suggestions = profile_service.load_suggestions(client, uid)
+    if not suggestions:
+        return
+    st.subheader("Dara found these")
+    for idx, sug in enumerate(suggestions):
+        c = sug.get("candidate") or {}
+        basics = c.get("basics") or {}
+        photo_url = None
+        if sug.get("source") == "real" and meets.is_real_user_id(c.get("id")):
+            try:
+                photos = profile_service.list_photos(client, c["id"])
+                if photos:
+                    photo_url = photos[0].get("signed_url")
+            except Exception:  # noqa: BLE001
+                pass
+        with st.container(border=True):
+            left, right = st.columns([1, 4])
+            with left:
+                if photo_url:
+                    st.image(photo_url, use_container_width=True)
+                else:
+                    st.markdown("## ✨")
+            with right:
+                tag = "  ·  _test persona_" if c.get("is_seed") else ""
+                st.markdown(f"**{basics.get('name', 'Someone')}**{tag}")
+                bits = _detail_bits(basics)
+                if bits:
+                    st.caption(bits)
+                if sug.get("score") is not None:
+                    st.caption(f"Compatibility {sug['score']}%")
+            if sug.get("verdict"):
+                st.write(sug["verdict"])
+            transcript = sug.get("transcript") or []
+            if transcript:
+                me_name, their = sug.get("me_name", "You"), basics.get("name", "Them")
+                with st.expander(f"Read how your Daras talked · {len(transcript)} messages"):
+                    for m in transcript:
+                        who = me_name if m.get("speaker") == "me" else their
+                        st.markdown(f"**{who}:** {m.get('content', '')}")
+            b1, b2 = st.columns(2)
+            if b1.button("Connect →", key=f"sugc_{idx}", type="primary", use_container_width=True):
+                _connect_suggestion(client, me, uid, suggestions, idx)
+            if b2.button("Pass", key=f"sugp_{idx}", use_container_width=True):
+                suggestions.pop(idx)
+                profile_service.save_suggestions(client, uid, suggestions)
+                st.rerun()
+
+
+def _connect_suggestion(client, me, uid, suggestions, idx) -> None:
+    sug = suggestions[idx]
+    c = sug.get("candidate") or {}
+    name = (c.get("basics") or {}).get("name", "them")
+    if sug.get("source") == "real" and meets.is_real_user_id(c.get("id")):
+        meets.connect(client, me, c, match_data={
+            "transcript": sug.get("transcript") or [], "score": sug.get("score"),
+            "verdict": sug.get("verdict"), "reasons": sug.get("reasons") or [],
+        })
+        st.toast(f"Connect request sent to {name}.")
+    else:
+        sm = st.session_state.setdefault("seed_matches", {})
+        cid = c.get("id") or f"seed_{c.get('username', 'x')}"
+        sm.setdefault(cid, {"candidate": c, "messages": []})
+        st.toast(f"It's a match with {name}!")
+    suggestions.pop(idx)
+    profile_service.save_suggestions(client, uid, suggestions)
+    st.rerun()
 
 
 # ─── Chat ────────────────────────────────────────────────────────────
