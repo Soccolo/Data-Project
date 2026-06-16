@@ -127,8 +127,8 @@ def _ensure_portrait(entity: Dict[str, Any]) -> Dict[str, Any]:
 
 # ─── Dara-to-Dara proxy conversation ─────────────────────────────────
 def _proxy_system(portrait, my_basics, their_basics, total_turns, conversation) -> str:
-    name = my_basics.get("name", "you")
-    their_name = their_basics.get("name", "them")
+    name = (my_basics.get("name") or "you").replace(" (Test)", "")
+    their_name = (their_basics.get("name") or "them").replace(" (Test)", "")
     samples = portrait.get("recent_messages") or []
     sample_block = ""
     if samples:
