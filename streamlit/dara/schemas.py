@@ -68,6 +68,16 @@ PORTRAIT: Dict[str, Any] = {
         "speech_notes": {"type": "string"},
         "recent_messages": {"type": "array", "items": {"type": "string"}},
         "vibe": {"type": "string"},
+        "big_five": {
+            "type": "object",
+            "properties": {
+                "openness": {"type": "integer"},
+                "conscientiousness": {"type": "integer"},
+                "extraversion": {"type": "integer"},
+                "agreeableness": {"type": "integer"},
+                "neuroticism": {"type": "integer"},
+            },
+        },
     },
     "required": ["communication_style", "speech_notes"],
 }
@@ -165,6 +175,14 @@ def normalize_portrait(d: Any) -> Dict[str, Any]:
             v = []
         return [str(x).strip() for x in v if str(x).strip()][:limit]
 
+    bf = d.get("big_five") if isinstance(d.get("big_five"), dict) else {}
+
+    def _score(k):
+        try:
+            return max(0, min(100, int(bf.get(k))))
+        except (TypeError, ValueError):
+            return None
+
     return {
         "interests": _list("interests", 8),
         "values": _list("values", 8),
@@ -176,6 +194,8 @@ def normalize_portrait(d: Any) -> Dict[str, Any]:
         "speech_notes": str(d.get("speech_notes") or "").strip(),
         "recent_messages": _list("recent_messages", 5),
         "vibe": str(d.get("vibe") or "").strip(),
+        "big_five": {k: _score(k) for k in
+                     ["openness", "conscientiousness", "extraversion", "agreeableness", "neuroticism"]},
     }
 
 
