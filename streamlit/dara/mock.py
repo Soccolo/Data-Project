@@ -112,6 +112,24 @@ def mock_response(
             f"doesn't read as dismissal."
         )
 
+    if purpose == "profile":
+        return json.dumps({
+            "interests": ["good food", "music", "long conversations", "the outdoors"],
+            "values": ["curiosity", "honesty", "warmth"],
+            "communication_style": "warm, direct, a little playful",
+            "humor_style": "dry, self-aware",
+            "looking_for": "someone curious who shows up and means it",
+            "dealbreakers": ["flakiness", "incuriosity"],
+            "observations": ["thinks out loud", "values their people", "open to being surprised"],
+            "speech_notes": "relaxed sentences, occasional dash, warm but not gushy, no heavy slang",
+            "recent_messages": [
+                "honestly that made my whole week, not gonna lie",
+                "i'm in — tell me when and where",
+                "ok but have you tried the place on the corner? changed my life",
+            ],
+            "vibe": "approachable, grounded, curious",
+        })
+
     if purpose == "photoAnalysis":
         if schema:
             return json.dumps({
