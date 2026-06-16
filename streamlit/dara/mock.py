@@ -144,6 +144,8 @@ def mock_response(
                 "ok but have you tried the place on the corner? changed my life",
             ],
             "vibe": "approachable, grounded, curious",
+            "big_five": {"openness": 78, "conscientiousness": 60, "extraversion": 57,
+                         "agreeableness": 72, "neuroticism": 43},
         })
 
     if purpose == "photoAnalysis":
