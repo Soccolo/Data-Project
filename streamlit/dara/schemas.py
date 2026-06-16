@@ -89,10 +89,14 @@ PROXY: Dict[str, Any] = {
     "required": ["message"],
 }
 
-PROXY: Dict[str, Any] = {
+# Does a candidate's photo match the user's stated physical preferences?
+PHYSICAL: Dict[str, Any] = {
     "type": "object",
-    "properties": {"message": {"type": "string"}},
-    "required": ["message"],
+    "properties": {
+        "meets": {"type": "boolean"},
+        "reason": {"type": "string"},
+    },
+    "required": ["meets"],
 }
 
 # Photo read. Deliberately about what a photo legitimately shows — overall
@@ -156,6 +160,11 @@ def normalize_messages(d: Any) -> List[str]:
     if not isinstance(msgs, list):
         msgs = []
     return [str(m) for m in msgs if str(m).strip()][:5]
+
+
+def normalize_physical(d: Any) -> Dict[str, Any]:
+    d = d if isinstance(d, dict) else {}
+    return {"meets": bool(d.get("meets", True)), "reason": str(d.get("reason") or "").strip()}
 
 
 def normalize_proxy(d: Any) -> str:
