@@ -1,134 +1,103 @@
-"""Matches: accept incoming connect requests, see your matches, and chat.
+"""Connections + chat between real users.
 
-Real matches go through Supabase (meets + messages); the other person is a real
-human who replies when they're online. Seed/test candidates have no human, so
-they auto-match and reply in-voice via AI, kept in session state.
+A "connect" is a meet request (reusing the meets table). When the other person
+accepts — or has already requested you — it becomes a match, and the two can
+exchange messages. RLS on meets/messages already restricts everything to the
+two parties, so these calls run with each user's own client.
+
+Seed/simulated candidates aren't real rows, so they don't pass through here —
+the flow layer handles those as a local persona chat.
 """
 
 from __future__ import annotations
 
-import streamlit as st
-
-from dara import matching, meets
-from . import session
-from .common import current_tier, go, rule
+from typing import Any, Dict, List, Optional, Tuple
 
 
-def _client():
-    try:
-        return session.get_client() if session.current_user() else None
-    except Exception:  # noqa: BLE001
-        return None
+def _name(profile: Optional[Dict[str, Any]], default: str = "Someone") -> str:
+    return ((profile or {}).get("basics") or {}).get("name") or default
 
 
-def _my_basics() -> dict:
-    return (session.current_profile() or {}).get("basics") or {"name": "You"}
+def is_real_user_id(candidate_id: Optional[str]) -> bool:
+    """Seed candidates use ids like 'seed_mei' and simulated ones have none;
+    real users are UUIDs from Supabase."""
+    return bool(candidate_id) and not str(candidate_id).startswith("seed_")
 
 
-def render() -> None:
-    st.markdown("##### Matches")
-    st.title("Your *matches*.")
-    rule()
-
-    if st.session_state.get("match_open"):
-        _chat(st.session_state["match_open"])
-        return
-    _list()
+def _between(client: Any, a: str, b: str) -> Optional[Dict[str, Any]]:
+    res = (client.table("meets").select("*")
+           .or_(f"and(proposer_id.eq.{a},recipient_id.eq.{b}),"
+                f"and(proposer_id.eq.{b},recipient_id.eq.{a})")
+           .limit(1).execute())
+    return (res.data or [None])[0]
 
 
-# ─── List ────────────────────────────────────────────────────────────
-def _list() -> None:
-    client, uid = _client(), session.user_id()
-
-    if client and uid:
-        reqs = meets.incoming_requests(client, uid)
-        if reqs:
-            st.subheader("Connect requests")
-            for r in reqs:
-                with st.container(border=True):
-                    st.write(f"**{r['proposer_name']}** wants to connect.")
-                    if r.get("message"):
-                        st.caption(r["message"])
-                    c1, c2 = st.columns(2)
-                    if c1.button("Accept", key=f"acc_{r['id']}", type="primary", use_container_width=True):
-                        meets.accept(client, r["id"])
-                        st.rerun()
-                    if c2.button("Decline", key=f"dec_{r['id']}", use_container_width=True):
-                        meets.decline(client, r["id"])
-                        st.rerun()
-
-    cards = []
-    if client and uid:
-        for m in meets.matches(client, uid):
-            _, oname = meets.other_party(m, uid)
-            cards.append({"kind": "real", "id": m["id"], "name": oname})
-    for cid, sm in (st.session_state.get("seed_matches") or {}).items():
-        cards.append({
-            "kind": "seed", "id": cid, "candidate": sm["candidate"],
-            "name": (sm["candidate"].get("basics") or {}).get("name", "Someone"),
-        })
-
-    st.subheader("Matches")
-    if not cards:
-        st.caption("No matches yet. Find someone in the interview, then tap Connect.")
-        return
-    for c in cards:
-        with st.container(border=True):
-            st.write(f"**{c['name']}**" + ("  ·  _test persona_" if c["kind"] == "seed" else ""))
-            if st.button("Open chat", key=f"open_{c['kind']}_{c['id']}", use_container_width=True):
-                st.session_state["match_open"] = c
-                st.rerun()
+def _set_status(client: Any, meet_id: str, status: str) -> Dict[str, Any]:
+    res = client.table("meets").update({"status": status}).eq("id", meet_id).execute()
+    return (res.data or [{}])[0]
 
 
-# ─── Chat ────────────────────────────────────────────────────────────
-def _chat(c: dict) -> None:
-    if st.button("← Matches"):
-        st.session_state.pop("match_open", None)
-        st.rerun()
-    st.subheader(c["name"])
+def connect(client: Any, me: Dict[str, Any], candidate: Dict[str, Any], note: str = "") -> Dict[str, Any]:
+    """Send a connect request, or instant-match if the candidate already
+    requested you. Returns {"meet": row, "matched": bool}."""
+    me_id, cand_id = me["id"], candidate["id"]
+    existing = _between(client, me_id, cand_id)
+    if existing:
+        # They already reached out to you and it's pending → accepting completes the match.
+        if existing["status"] == "pending" and existing["recipient_id"] == me_id:
+            return {"meet": _set_status(client, existing["id"], "accepted"), "matched": True}
+        return {"meet": existing, "matched": existing["status"] == "accepted"}
 
-    if c["kind"] == "seed":
-        _seed_chat(c)
-    else:
-        _real_chat(c)
-
-
-def _seed_chat(c: dict) -> None:
-    sm = (st.session_state.get("seed_matches") or {}).get(c["id"])
-    if not sm:
-        st.caption("This chat is no longer available.")
-        return
-    msgs = sm["messages"]
-    # Lazy opener: let the persona say hello first.
-    if not msgs:
-        opener = matching.persona_reply(sm["candidate"], _my_basics(), [], current_tier())
-        msgs.append({"sender": "them", "body": opener})
-
-    for m in msgs:
-        is_me = m["sender"] == "me"
-        with st.chat_message("user" if is_me else "assistant", avatar=None if is_me else "✨"):
-            st.write(m["body"])
-
-    prompt = st.chat_input(f"Message {c['name']}…")
-    if prompt:
-        msgs.append({"sender": "me", "body": prompt})
-        with st.spinner(f"{c['name']} is typing…"):
-            reply = matching.persona_reply(sm["candidate"], _my_basics(), msgs, current_tier())
-        msgs.append({"sender": "them", "body": reply})
-        st.rerun()
+    row = {
+        "proposer_id": me_id, "recipient_id": cand_id,
+        "proposer_name": _name(me), "recipient_name": _name(candidate),
+        "message": note or None, "status": "pending",
+    }
+    res = client.table("meets").insert(row).execute()
+    return {"meet": (res.data or [row])[0], "matched": False}
 
 
-def _real_chat(c: dict) -> None:
-    client, uid = _client(), session.user_id()
-    if not (client and uid):
-        st.caption("Sign in to view this chat.")
-        return
-    for m in meets.list_messages(client, c["id"]):
-        with st.chat_message("user" if m.get("sender_id") == uid else "assistant"):
-            st.write(m.get("body", ""))
+def accept(client: Any, meet_id: str) -> Dict[str, Any]:
+    return _set_status(client, meet_id, "accepted")
 
-    prompt = st.chat_input(f"Message {c['name']}…")
-    if prompt:
-        meets.send_message(client, c["id"], uid, prompt)
-        st.rerun()
-    st.caption("They'll see this and reply when they're next online. Tap ← Matches and back to refresh.")
+
+def decline(client: Any, meet_id: str) -> Dict[str, Any]:
+    return _set_status(client, meet_id, "declined")
+
+
+def incoming_requests(client: Any, uid: str) -> List[Dict[str, Any]]:
+    res = (client.table("meets").select("*")
+           .eq("recipient_id", uid).eq("status", "pending").execute())
+    return res.data or []
+
+
+def outgoing_requests(client: Any, uid: str) -> List[Dict[str, Any]]:
+    res = (client.table("meets").select("*")
+           .eq("proposer_id", uid).eq("status", "pending").execute())
+    return res.data or []
+
+
+def matches(client: Any, uid: str) -> List[Dict[str, Any]]:
+    res = (client.table("meets").select("*").eq("status", "accepted")
+           .or_(f"proposer_id.eq.{uid},recipient_id.eq.{uid}").execute())
+    return res.data or []
+
+
+def other_party(meet: Dict[str, Any], uid: str) -> Tuple[str, str]:
+    """(id, name) of the person who isn't `uid`."""
+    if meet.get("proposer_id") == uid:
+        return meet.get("recipient_id"), meet.get("recipient_name", "Them")
+    return meet.get("proposer_id"), meet.get("proposer_name", "Them")
+
+
+def send_message(client: Any, meet_id: str, sender_id: str, body: str) -> Dict[str, Any]:
+    res = client.table("messages").insert(
+        {"meet_id": meet_id, "sender_id": sender_id, "body": body}
+    ).execute()
+    return (res.data or [{}])[0]
+
+
+def list_messages(client: Any, meet_id: str) -> List[Dict[str, Any]]:
+    res = (client.table("messages").select("*")
+           .eq("meet_id", meet_id).order("created_at").execute())
+    return res.data or []
