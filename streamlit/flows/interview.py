@@ -108,6 +108,10 @@ def render() -> None:
                     st.session_state["iv_portrait"] = matching.get_or_build_portrait(
                         session.current_profile() or {"basics": {}}, msgs, current_tier(), _client(),
                     )
+                try:
+                    session.refresh_profile()  # so the Account tab sees it without a reload
+                except Exception:  # noqa: BLE001
+                    pass
                 _clear_draft()
                 st.rerun()
         with c2:
@@ -151,6 +155,10 @@ def _reveal_match(msgs: list) -> None:
         on_turn=_on_turn,
     )
     holder.empty()
+    try:
+        session.refresh_profile()  # portrait was built/persisted inside find_match
+    except Exception:  # noqa: BLE001
+        pass
     st.session_state.pop("iv_portrait", None)
     _clear_draft()
     st.rerun()
