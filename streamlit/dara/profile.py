@@ -197,3 +197,57 @@ def clear_interview_draft(client: Client, user_id: str) -> None:
         ).execute()
     except Exception:  # noqa: BLE001
         pass
+
+
+# ─── Daily match quota + suggestions (on user_state) ─────────────────
+import datetime as _dt  # noqa: E402
+
+
+def _today() -> str:
+    return _dt.date.today().isoformat()
+
+
+def match_usage(client: Client, user_id: str) -> int:
+    """Matches generated today (resets when the date rolls over)."""
+    try:
+        res = (client.table("user_state").select("daily_count")
+               .eq("user_id", user_id).limit(1).execute())
+        if res.data:
+            dc = res.data[0].get("daily_count") or {}
+            if dc.get("date") == _today():
+                return int(dc.get("count") or 0)
+    except Exception:  # noqa: BLE001
+        pass
+    return 0
+
+
+def record_matches(client: Client, user_id: str, n: int) -> None:
+    used = match_usage(client, user_id)
+    try:
+        client.table("user_state").upsert(
+            {"user_id": user_id, "daily_count": {"date": _today(), "count": used + n}},
+            on_conflict="user_id",
+        ).execute()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def load_suggestions(client: Client, user_id: str) -> list:
+    try:
+        res = (client.table("user_state").select("suggestions")
+               .eq("user_id", user_id).limit(1).execute())
+        if res.data and isinstance(res.data[0].get("suggestions"), list):
+            return res.data[0]["suggestions"]
+    except Exception:  # noqa: BLE001
+        pass
+    return []
+
+
+def save_suggestions(client: Client, user_id: str, suggestions: list) -> None:
+    try:
+        client.table("user_state").upsert(
+            {"user_id": user_id, "suggestions": suggestions[-40:]},  # cap stored history
+            on_conflict="user_id",
+        ).execute()
+    except Exception:  # noqa: BLE001
+        pass
