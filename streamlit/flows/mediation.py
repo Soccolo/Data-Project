@@ -20,13 +20,16 @@ _MEDIATION_TURNS_EACH = 3  # 6 Dara-to-Dara messages
 
 
 # ─── AI engine ───────────────────────────────────────────────────────
-def _intake_reply(my_name: str, topic: str, messages, tier) -> str:
+def _intake_reply(my_name: str, other_name: str, topic: str, messages, tier) -> str:
     system = (
-        f"You are Dara, privately helping {my_name} talk through their side of a "
-        f"conflict about '{topic}' before you mediate with the other person's Dara. "
-        f"This is confidential — only {my_name} ever sees it. Be warm; ask one short "
-        "question at a time; help them name what they felt and what they actually "
-        "need. Two sentences max."
+        f"You are Dara, privately and confidentially helping {my_name} talk through "
+        f"their side of a disagreement with {other_name}. The conflict was first "
+        f"described as: '{topic}' — but that wording may be how the OTHER person framed "
+        f"it, so do NOT assume it reflects {my_name}'s own view or that {my_name} is the "
+        f"one who feels that way. Ask {my_name} how THEY see what's happening and how "
+        "it's affecting them. Be warm; one short question at a time; help them name what "
+        "they felt and what they actually need. Two sentences max. Only reflect back what "
+        f"{my_name} actually says — never invent details they didn't give."
     )
     try:
         return call_ai(purpose="intake", system_prompt=system, tier=tier, history=messages)
@@ -34,14 +37,16 @@ def _intake_reply(my_name: str, topic: str, messages, tier) -> str:
         return "Tell me a little more about what happened, and how it landed for you."
 
 
-def _summarize_intake(my_name: str, topic: str, messages, tier) -> dict:
+def _summarize_intake(my_name: str, other_name: str, topic: str, messages, tier) -> dict:
     convo = "\n".join(
         f"{'Dara' if m['role'] == 'assistant' else my_name}: {m['content']}" for m in messages
     )
     system = (
-        f"Summarise {my_name}'s side of a conflict about '{topic}' from this private "
-        "intake. Return JSON: summary (1-2 sentences in their own framing), needs "
-        "(their underlying needs), safe (false if ANY sign of abuse, violence, "
+        f"Summarise {my_name}'s OWN side of their disagreement with {other_name} (first "
+        f"described as '{topic}') from this private intake. Capture only what {my_name} "
+        "actually said — never infer unstated specifics (a field of study, a job title, a "
+        "diagnosis, a reason). Return JSON: summary (1-2 sentences in their own framing), "
+        "needs (their underlying needs), safe (false if ANY sign of abuse, violence, "
         "coercion, or fear), safety_reason (one sentence if unsafe)."
     )
     try:
@@ -246,12 +251,13 @@ def _session_view(client, me, uid, sid) -> None:
 
 def _intake(client, s, role) -> None:
     my_name = conflicts.name_of(s, role)
+    other_name = conflicts.name_of(s, conflicts.other_role(role))
     st.write("This part is private — only you and your Dara. When you're ready, Dara shares a "
              "short summary with the other person's Dara, never your raw words.")
 
     msgs = conflicts.side(s, role).get("messages") or []
     if not msgs:
-        opener = _intake_reply(my_name, s["topic"], [], current_tier())
+        opener = _intake_reply(my_name, other_name, s["topic"], [], current_tier())
         s = conflicts.append_intake_message(client, s, role, "assistant", opener)
         msgs = conflicts.side(s, role).get("messages")
 
@@ -264,7 +270,7 @@ def _intake(client, s, role) -> None:
     if user_turns >= 2:
         if st.button("I've said my piece — share my side →", type="primary", use_container_width=True):
             with st.spinner("Dara is summarising your side…"):
-                summ = _summarize_intake(my_name, s["topic"], msgs, current_tier())
+                summ = _summarize_intake(my_name, other_name, s["topic"], msgs, current_tier())
             text = summ["summary"]
             if summ.get("needs"):
                 text += " (Underlying needs: " + ", ".join(summ["needs"]) + ".)"
@@ -273,8 +279,11 @@ def _intake(client, s, role) -> None:
 
     prompt = st.chat_input("Tell Dara…")
     if prompt:
-        conflicts.append_intake_message(client, s, role, "user", prompt)
-        reply = _intake_reply(my_name, s["topic"], msgs + [{"role": "user", "content": prompt}], current_tier())
+        # Capture the updated session so the assistant append builds on the
+        # message we just added — otherwise the second write overwrites the user's.
+        s = conflicts.append_intake_message(client, s, role, "user", prompt)
+        reply = _intake_reply(my_name, other_name, s["topic"],
+                              conflicts.side(s, role).get("messages"), current_tier())
         conflicts.append_intake_message(client, s, role, "assistant", reply)
         st.rerun()
 
