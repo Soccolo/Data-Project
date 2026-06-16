@@ -152,3 +152,13 @@ def _signed_url(client: Client, storage_path: str) -> Optional[str]:
     if isinstance(res, dict):
         return res.get("signedURL") or res.get("signedUrl") or res.get("signed_url")
     return None
+
+
+def download_photo_bytes(client: Client, storage_path: str) -> Optional[bytes]:
+    """Raw image bytes for a stored photo — used to feed the vision model.
+    RLS lets any authenticated user read photos, so this works for a match's
+    photos too, not just the caller's own."""
+    try:
+        return client.storage.from_(PHOTO_BUCKET).download(storage_path)
+    except Exception:  # noqa: BLE001
+        return None
