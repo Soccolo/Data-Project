@@ -44,6 +44,58 @@ _PHOTO_SYSTEM = (
     "on how that vibe fits what the user is looking for)."
 )
 
+_PORTRAIT_SYSTEM = (
+    "You are Dara, distilling a getting-to-know-you interview into a structured "
+    "portrait of your user, so you can later represent them faithfully in "
+    "conversations with other people's Daras. Capture who they are AND how they "
+    "actually talk. Return JSON with: interests, values, communication_style, "
+    "humor_style, looking_for, dealbreakers, observations, speech_notes (a precise "
+    "description of their writing voice — casing, punctuation, rhythm, slang), and "
+    "recent_messages (2-3 short lines written in their exact voice, as if texting). "
+    "Ground everything in what they actually said; do not invent biography."
+)
+
+
+def distill_portrait(conversation, basics, tier: Tier = "free") -> Dict[str, Any]:
+    """Turn an interview transcript into the structured portrait."""
+    convo = "\n".join(
+        f"{'User' if m.get('role') == 'user' else 'Dara'}: {m.get('content', '')}"
+        for m in (conversation or [])
+    )
+    user_text = (
+        f"Here is the interview with {basics.get('name', 'the user')}.\n"
+        f"Basics: {prefs_mod.summarize_self(basics)}\n\n"
+        f"TRANSCRIPT\n{convo}\n\n"
+        "Distil the portrait now."
+    )
+    try:
+        raw = call_ai(
+            purpose="profile", system_prompt=_PORTRAIT_SYSTEM, tier=tier,
+            user_text=user_text, schema=schemas.PORTRAIT, max_tokens=900,
+        )
+        return schemas.normalize_portrait(raw)
+    except Exception:  # noqa: BLE001
+        return schemas.normalize_portrait({})
+
+
+def get_or_build_portrait(me, conversation, tier: Tier = "free", client: Any = None) -> Dict[str, Any]:
+    """Return the user's cached portrait, distilling and persisting it once if
+    it doesn't exist yet."""
+    existing = ((me or {}).get("profile") or {}).get("portrait")
+    if existing and existing.get("speech_notes"):
+        return schemas.normalize_portrait(existing)
+
+    portrait = distill_portrait(conversation, (me or {}).get("basics") or {}, tier)
+
+    uid = (me or {}).get("id")
+    if client is not None and uid:
+        try:
+            profile_json = {**((me or {}).get("profile") or {}), "portrait": portrait}
+            profile_service.update_profile(client, uid, profile=profile_json)
+        except Exception:  # noqa: BLE001
+            pass
+    return portrait
+
 _SAMPLE = [
     {"name": "Mara", "gender": "Woman", "job": "Marine biologist", "nationality": "Portuguese",
      "bio": "Weekend free-diver, weekday data nerd. Looking for someone genuinely curious."},
