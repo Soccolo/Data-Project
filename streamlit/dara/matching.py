@@ -59,7 +59,10 @@ _PORTRAIT_SYSTEM = (
     "humor_style, looking_for, dealbreakers, observations, speech_notes (a precise "
     "description of their writing voice — casing, punctuation, rhythm, slang), and "
     "recent_messages (2-3 short lines written in their exact voice, as if texting). "
-    "Ground everything in what they actually said; do not invent biography."
+    "Record ONLY what they actually stated — never specialise or fill gaps. If they "
+    "said 'actuary' but not the field, keep 'actuary'; do NOT upgrade it to 'pensions "
+    "actuary' or any specific guess. Leave unknowns out entirely, and let the "
+    "recent_messages invent no concrete facts. Ground everything in what they said."
 )
 
 _SAMPLE = [
@@ -156,9 +159,13 @@ def _proxy_system(portrait, my_basics, their_basics, total_turns, conversation) 
         "Share concrete facts about yourself willingly when they come up. Keep messages "
         "SHORT (1-3 sentences). Conduct it in English even if your human's native "
         "language differs.\n"
-        "ANTI-HALLUCINATION: never invent facts about yourself not given above (employer, "
-        "neighbourhood, friends, trips). If asked something you don't know, defer warmly "
-        "in-voice ('i'll tell you on the date') rather than making it up.\n"
+        "ANTI-HALLUCINATION (critical): only state facts explicitly given above. NEVER "
+        "guess specifics you weren't told — not your employer, neighbourhood, friends, "
+        "trips, NOR a narrower version of something general. If you're 'an actuary' and "
+        "they ask what kind, you genuinely DO NOT know — do not pick one. When asked "
+        "anything you don't know, playfully deferring IS the correct answer: 'ha, let's "
+        f"keep that for when we actually meet' or 'i'll tell you in person' — in {name}'s "
+        f"voice. Guessing breaks trust when {name} reads this transcript.\n"
         f"You have ~{total_turns} total messages. Be efficient.\n\n"
         f"Conversation so far:\n{convo_block}\n\n"
         'Output strict JSON: {"message": "your next message in voice"}'
@@ -375,3 +382,17 @@ def _int(v: Any, default: int = 0) -> int:
         return int(v)
     except (TypeError, ValueError):
         return default
+
+
+def persona_reply(candidate, me_basics, chat, tier: Tier = "free") -> str:
+    """A seed/persona candidate replying in their own voice to a real user's
+    chat. ``chat`` is [{"sender": "me"|"them", "body": str}] where 'them' is the
+    candidate. Same voice + anti-hallucination rules as the proxy."""
+    portrait = _ensure_portrait(candidate)
+    cand_basics = candidate.get("basics") or {}
+    # In the roleplay's frame, the candidate is "me"; the real user is "them".
+    perspective = [
+        {"speaker": "me" if m.get("sender") == "them" else "them", "content": m.get("body", "")}
+        for m in (chat or [])
+    ]
+    return _proxy_turn(portrait, cand_basics, me_basics or {"name": "they"}, perspective, 40, tier)
