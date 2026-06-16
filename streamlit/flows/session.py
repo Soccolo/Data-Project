@@ -9,6 +9,7 @@ works for the lifetime of the session — you just re-login after a hard refresh
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
@@ -97,11 +98,15 @@ def refresh_profile() -> None:
 
 
 # ─── Login / logout / restore ────────────────────────────────────────
-def login(result) -> None:
-    """Adopt a successful AuthResult. The client already carries the session."""
+def login(result, remember: bool = True) -> None:
+    """Adopt a successful AuthResult. The client already carries the session.
+    When ``remember`` is set, persist the session to a cookie so it survives a
+    refresh; otherwise keep it to this browser session only."""
     st.session_state["auth_user"] = result.user
-    if result.access_token and result.refresh_token:
+    if remember and result.access_token and result.refresh_token:
         _persist(result.access_token, result.refresh_token)
+    elif not remember:
+        _clear_cookie()
     _load_profile()
 
 
@@ -122,12 +127,24 @@ def try_restore() -> bool:
     cm = _cookie_manager()
     if not cm:
         return False
+
+    # extra_streamlit_components reads cookies via a frontend round-trip, so on
+    # the first run after a fresh page load they aren't back yet. get_all()
+    # mounts the component; if nothing has arrived, give it one rerun to report
+    # before concluding the user is logged out (otherwise a refresh always lands
+    # on the login screen even with a valid cookie).
     try:
-        raw = cm.get(_COOKIE)
+        cookies = cm.get_all() or {}
     except Exception:  # noqa: BLE001
-        raw = None
+        cookies = {}
+    raw = cookies.get(_COOKIE)
     if not raw:
+        if not st.session_state.get("_cookie_settled"):
+            st.session_state["_cookie_settled"] = True
+            time.sleep(0.3)
+            st.rerun()
         return False
+
     try:
         data = json.loads(raw)
     except Exception:  # noqa: BLE001
