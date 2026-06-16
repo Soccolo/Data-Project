@@ -16,13 +16,15 @@ def render() -> None:
     st.markdown("##### Account")
     st.title(f"@{prof.get('username', '—')}")
 
-    tab_profile, tab_prefs, tab_photos, tab_plan, tab_settings = st.tabs(
-        ["Profile", "Preferences", "Photos", "Plan", "Settings"]
+    tab_profile, tab_prefs, tab_insights, tab_photos, tab_plan, tab_settings = st.tabs(
+        ["Profile", "Preferences", "What Dara learned", "Photos", "Plan", "Settings"]
     )
     with tab_profile:
         _profile(prof)
     with tab_prefs:
         _preferences(prof)
+    with tab_insights:
+        _insights(prof)
     with tab_photos:
         _photos()
     with tab_plan:
@@ -144,6 +146,58 @@ def _preferences(prof: dict) -> None:
 
 def _idx(options: list, value, default: int = 0) -> int:
     return options.index(value) if value in options else default
+
+
+# ─── What Dara learned (portrait) ────────────────────────────────────
+_OCEAN = [
+    ("openness", "Openness"),
+    ("conscientiousness", "Conscientiousness"),
+    ("extraversion", "Extraversion"),
+    ("agreeableness", "Agreeableness"),
+    ("neuroticism", "Emotional sensitivity"),
+]
+
+
+def _insights(prof: dict) -> None:
+    portrait = (prof.get("profile") or {}).get("portrait") or {}
+    if not portrait.get("speech_notes"):
+        st.caption(
+            "Once you've done an interview and revealed a match, Dara sketches what it "
+            "picked up about you here — your traits, how you talk, and a few notes."
+        )
+        return
+
+    st.caption("Dara's impression from your interview — a read on how you came across, not a clinical test.")
+
+    bf = portrait.get("big_five") or {}
+    if any(bf.get(k) is not None for k, _ in _OCEAN):
+        st.subheader("Personality (OCEAN)")
+        for key, label in _OCEAN:
+            v = bf.get(key)
+            if v is not None:
+                st.progress(int(v) / 100, text=f"{label} · {int(v)}")
+
+    if portrait.get("speech_notes"):
+        st.subheader("How you talk")
+        st.write(portrait["speech_notes"])
+
+    cols = st.columns(2)
+    if portrait.get("interests"):
+        with cols[0]:
+            st.subheader("Interests")
+            st.write(", ".join(portrait["interests"]))
+    if portrait.get("values"):
+        with cols[1]:
+            st.subheader("Values")
+            st.write(", ".join(portrait["values"]))
+
+    if portrait.get("observations"):
+        st.subheader("Notes")
+        for o in portrait["observations"]:
+            st.write(f"• {o}")
+
+    if portrait.get("vibe"):
+        st.caption(f"Overall vibe: {portrait['vibe']}")
 
 
 # ─── Photos ──────────────────────────────────────────────────────────
