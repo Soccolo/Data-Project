@@ -1,13 +1,114 @@
+/* Dara — shared design language.
+   Signature: a rose→iris gradient (two colours meeting in the middle, which
+   is what Dara does in both flows). Display face Fraunces, body Inter.
+   These tokens + classes match the Streamlit app so both surfaces read as
+   one product. */
+
+:root{
+  --dara-rose:#FF5D8F;
+  --dara-iris:#6D5EF6;
+  --dara-ink:#1F1633;
+  --dara-muted:#8A82A6;
+  --dara-bg:#FCFBFF;
+  --dara-surface:#F3F0FF;
+  --dara-line:rgba(109,94,246,.16);
+  --dara-grad:linear-gradient(100deg,var(--dara-rose) 0%,var(--dara-iris) 100%);
+  --dara-shadow:0 14px 38px -22px rgba(31,22,51,.40);
+}
+
 * { box-sizing: border-box; }
 html, body {
   margin: 0; padding: 0;
-  background: #faf6f0; color: #1a1817;
-  font-family: 'Manrope', system-ui, sans-serif;
+  background: var(--dara-bg); color: var(--dara-ink);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 button { font-family: inherit; }
 input, textarea, select { font-family: inherit; }
 
+/* ─── Identity ─────────────────────────────────────────────────────── */
+.dara-wordmark{
+  font-family:'Inter',sans-serif; font-weight:600;
+  font-size:.78rem; letter-spacing:.4em; text-transform:uppercase;
+  background:var(--dara-grad);
+  -webkit-background-clip:text; background-clip:text;
+  -webkit-text-fill-color:transparent; color:transparent;
+}
+.dara-title{
+  font-family:'Fraunces','Inter',Georgia,serif;
+  font-weight:900; font-size:clamp(2.1rem,5vw,2.9rem); line-height:1.06;
+  letter-spacing:-0.015em; margin:0 0 .3rem;
+  background:var(--dara-grad);
+  -webkit-background-clip:text; background-clip:text;
+  -webkit-text-fill-color:transparent; color:transparent;
+  width:max-content; max-width:100%;
+}
+.dara-title em{ font-style:italic; }
+.dara-h2{ font-family:'Fraunces',serif; font-weight:700; font-size:1.35rem;
+  letter-spacing:-0.01em; color:var(--dara-ink); margin:0 0 .4rem; }
+.dara-muted{ color:var(--dara-muted); line-height:1.6; }
+
+/* The connecting-line motif */
+.dara-rule{ height:3px; width:60px; border:0; border-radius:3px;
+  margin:.2rem 0 1.2rem; background:var(--dara-grad); }
+
+/* ─── Surfaces ─────────────────────────────────────────────────────── */
+.dara-card{
+  background:#fff; border:1px solid var(--dara-line); border-radius:18px;
+  box-shadow:var(--dara-shadow); padding:1.4rem;
+}
+
+/* ─── Inputs ───────────────────────────────────────────────────────── */
+.dara-input, .dara-textarea{
+  width:100%; padding:.7rem .85rem; border-radius:10px;
+  border:1px solid #E4DEF7; background:#fff; color:var(--dara-ink);
+  font-size:1rem; outline:none;
+  transition:border-color .12s ease, box-shadow .12s ease;
+}
+.dara-textarea{ resize:vertical; min-height:96px; line-height:1.5; }
+.dara-input:focus, .dara-textarea:focus{
+  border-color:var(--dara-iris); box-shadow:0 0 0 3px rgba(109,94,246,.18);
+}
+.dara-label{ display:block; font-size:.85rem; font-weight:600;
+  color:var(--dara-ink); margin:0 0 .35rem; }
+
+/* ─── Buttons ──────────────────────────────────────────────────────── */
+.dara-btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:.4rem;
+  width:100%; padding:.8rem 1.2rem; border-radius:12px; cursor:pointer;
+  font-family:'Inter',sans-serif; font-weight:600; font-size:.95rem;
+  border:1px solid var(--dara-line); background:#fff; color:var(--dara-ink);
+  transition:transform .12s ease, box-shadow .14s ease, border-color .12s ease;
+}
+.dara-btn:hover:not(:disabled){ transform:translateY(-1px);
+  border-color:var(--dara-iris); box-shadow:0 8px 22px -10px rgba(109,94,246,.45); }
+.dara-btn:disabled{ opacity:.5; cursor:not-allowed; }
+
+/* Boldness lives here: the one primary action per screen */
+.dara-btn-primary{
+  background:var(--dara-grad); color:#fff; border:1px solid transparent;
+  box-shadow:0 8px 20px -8px rgba(109,94,246,.55);
+}
+.dara-btn-primary:hover:not(:disabled){
+  box-shadow:0 12px 26px -8px rgba(255,93,143,.55);
+}
+
+/* ─── Wizard step pills ────────────────────────────────────────────── */
+.dara-steps{ display:flex; gap:.5rem; margin:.2rem 0 1.2rem; flex-wrap:wrap; }
+.dara-step{ font:600 .7rem/1 'Inter',sans-serif; letter-spacing:.05em;
+  text-transform:uppercase; padding:.42rem .8rem; border-radius:999px;
+  color:var(--dara-muted); background:#EEEAFB; }
+.dara-step.active{ color:#fff; background:var(--dara-grad);
+  box-shadow:0 6px 16px -8px rgba(109,94,246,.6); }
+
+/* ─── Feedback ─────────────────────────────────────────────────────── */
+.dara-error{ padding:.7rem .9rem; border-radius:10px; font-size:.88rem;
+  background:#FFF0F4; border-left:3px solid var(--dara-rose); color:#B83260; }
+.dara-loading{ min-height:100vh; display:flex; align-items:center;
+  justify-content:center; font-family:'Fraunces',serif; font-style:italic;
+  color:var(--dara-muted); }
+
+/* ─── Motion (preserved from the existing component) ───────────────── */
 @keyframes dara-fade-up {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -25,3 +126,9 @@ input, textarea, select { font-family: inherit; }
   30% { opacity: 1; }
 }
 .dara-typing-dot { animation: dara-typing 1.2s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce){
+  .dara-btn{ transition:none; }
+  .dara-btn:hover:not(:disabled){ transform:none; }
+  .dara-fade-up, .dara-pulse-dot, .dara-typing-dot{ animation:none; }
+}
