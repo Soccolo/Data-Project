@@ -5,6 +5,7 @@ from __future__ import annotations
 import streamlit as st
 
 from dara import auth as auth_service
+from dara import prefs as prefs_mod
 from dara import profile as profile_service
 from dara.tiers import TIER_INFO, TIER_ORDER
 from . import session
@@ -15,11 +16,13 @@ def render() -> None:
     st.markdown("##### Account")
     st.title(f"@{prof.get('username', '—')}")
 
-    tab_profile, tab_photos, tab_plan, tab_settings = st.tabs(
-        ["Profile", "Photos", "Plan", "Settings"]
+    tab_profile, tab_prefs, tab_photos, tab_plan, tab_settings = st.tabs(
+        ["Profile", "Preferences", "Photos", "Plan", "Settings"]
     )
     with tab_profile:
         _profile(prof)
+    with tab_prefs:
+        _preferences(prof)
     with tab_photos:
         _photos()
     with tab_plan:
@@ -44,6 +47,24 @@ def _profile(prof: dict) -> None:
             index=kinds.index(cur_kind) if cur_kind in kinds else 0,
             format_func=lambda k: _KINDS[k],
         )
+        col_g, col_o = st.columns(2)
+        with col_g:
+            gender = st.selectbox(
+                "Gender", prefs_mod.GENDERS, index=_idx(prefs_mod.GENDERS, basics.get("gender")),
+            )
+        with col_o:
+            orientation = st.selectbox(
+                "Sexuality", prefs_mod.ORIENTATIONS,
+                index=_idx(prefs_mod.ORIENTATIONS, basics.get("orientation"), len(prefs_mod.ORIENTATIONS) - 1),
+            )
+        col_age, col_nat = st.columns(2)
+        with col_age:
+            age = st.number_input(
+                "Age", min_value=prefs_mod.MIN_AGE, max_value=120,
+                value=int(basics.get("age") or 27), step=1,
+            )
+        with col_nat:
+            nationality = st.text_input("Nationality", value=basics.get("nationality", ""))
         bio = st.text_area("Description", value=basics.get("bio", ""), height=100)
         col_job, col_height = st.columns(2)
         with col_job:
@@ -65,7 +86,8 @@ def _profile(prof: dict) -> None:
             st.error("That username is taken.")
             return
         new_basics = {
-            **basics, "name": name.strip(), "bio": bio.strip(),
+            **basics, "name": name.strip(), "gender": gender, "orientation": orientation,
+            "age": int(age), "nationality": nationality.strip(), "bio": bio.strip(),
             "job": job.strip(), "height_cm": int(height),
         }
         try:
@@ -77,6 +99,51 @@ def _profile(prof: dict) -> None:
             return
         session.refresh_profile()
         st.success("Saved.")
+
+
+# ─── Preferences ─────────────────────────────────────────────────────
+def _preferences(prof: dict) -> None:
+    p = {**prefs_mod.default_preferences(), **((prof.get("profile") or {}).get("preferences") or {})}
+    with st.form("edit_prefs"):
+        interested_in = st.multiselect(
+            "Interested in", prefs_mod.INTERESTED_IN,
+            default=[x for x in p["interested_in"] if x in prefs_mod.INTERESTED_IN],
+        )
+        age_range = st.slider(
+            "Age range", prefs_mod.MIN_AGE, 99,
+            (max(prefs_mod.MIN_AGE, int(p["age_min"])), max(prefs_mod.MIN_AGE, int(p["age_max"]))),
+        )
+        height_range = st.slider(
+            "Height range (cm)", 120, 230, (int(p["height_min_cm"]), int(p["height_max_cm"])),
+        )
+        intent = st.selectbox("Looking for", prefs_mod.INTENTS, index=_idx(prefs_mod.INTENTS, p["intent"]))
+        nationalities = st.text_input(
+            "Preferred nationalities (optional)", value=", ".join(p["nationalities"]),
+            help="A soft preference Dara weighs — not a hard filter.",
+        )
+        dealbreakers = st.text_area("Dealbreakers (optional)", value=p["dealbreakers"], height=70)
+        submitted = st.form_submit_button("Save preferences", use_container_width=True)
+
+    if submitted:
+        new_prefs = {
+            "interested_in": interested_in,
+            "age_min": age_range[0], "age_max": age_range[1],
+            "height_min_cm": height_range[0], "height_max_cm": height_range[1],
+            "nationalities": [n.strip() for n in nationalities.split(",") if n.strip()],
+            "intent": intent, "dealbreakers": dealbreakers.strip(),
+        }
+        profile_json = {**(prof.get("profile") or {}), "preferences": new_prefs}
+        try:
+            profile_service.update_profile(session.get_client(), session.user_id(), profile=profile_json)
+        except Exception as e:  # noqa: BLE001
+            st.error(f"Couldn't save: {e}")
+            return
+        session.refresh_profile()
+        st.success("Saved.")
+
+
+def _idx(options: list, value, default: int = 0) -> int:
+    return options.index(value) if value in options else default
 
 
 # ─── Photos ──────────────────────────────────────────────────────────
