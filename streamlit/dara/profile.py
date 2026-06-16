@@ -162,3 +162,38 @@ def download_photo_bytes(client: Client, storage_path: str) -> Optional[bytes]:
         return client.storage.from_(PHOTO_BUCKET).download(storage_path)
     except Exception:  # noqa: BLE001
         return None
+
+
+# ─── In-progress interview draft (private, on user_state) ────────────
+def save_interview_draft(client: Client, user_id: str, messages) -> None:
+    """Persist the live interview so a page refresh restores it. Owner-only."""
+    try:
+        client.table("user_state").upsert(
+            {"user_id": user_id, "interview_draft": messages},
+            on_conflict="user_id",
+        ).execute()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def load_interview_draft(client: Client, user_id: str) -> list:
+    try:
+        res = (client.table("user_state").select("interview_draft")
+               .eq("user_id", user_id).limit(1).execute())
+        if res.data:
+            draft = res.data[0].get("interview_draft")
+            if isinstance(draft, list):
+                return draft
+    except Exception:  # noqa: BLE001
+        pass
+    return []
+
+
+def clear_interview_draft(client: Client, user_id: str) -> None:
+    try:
+        client.table("user_state").upsert(
+            {"user_id": user_id, "interview_draft": None},
+            on_conflict="user_id",
+        ).execute()
+    except Exception:  # noqa: BLE001
+        pass
