@@ -49,6 +49,19 @@ def _list() -> None:
                     st.write(f"**{r['proposer_name']}** wants to connect.")
                     if r.get("message"):
                         st.caption(r["message"])
+
+                    data = r.get("match_data") or {}
+                    if data.get("score") is not None:
+                        st.metric("Compatibility", f"{data.get('score')}%")
+                    if data.get("verdict"):
+                        st.write(data["verdict"])
+                    transcript = data.get("transcript") or []
+                    if transcript:
+                        with st.expander(f"Read how your Daras talked · {len(transcript)} messages"):
+                            for m in transcript:
+                                who = r["proposer_name"] if m.get("speaker") == "me" else r["recipient_name"]
+                                st.markdown(f"**{who}:** {m.get('content', '')}")
+
                     c1, c2 = st.columns(2)
                     if c1.button("Accept", key=f"acc_{r['id']}", type="primary", use_container_width=True):
                         meets.accept(client, r["id"])
