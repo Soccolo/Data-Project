@@ -24,6 +24,11 @@ from .tiers import ModelChoice
 _TIMEOUT = 90      # seconds
 _MAX_TOKENS = 2048
 
+# Some calls (e.g. an interview opener) have no user text yet. Newer Claude
+# models reject whitespace-only text blocks ("text content blocks must contain
+# non-whitespace text"), so seed a minimal non-empty kickoff rather than " ".
+_KICKOFF = "Let's begin."
+
 
 def call_provider(choice: ModelChoice, body: Dict[str, Any]) -> str:
     if choice.provider == "anthropic":
@@ -62,7 +67,7 @@ def _call_anthropic(model: str, body: Dict[str, Any]) -> str:
         for m in (body.get("media") or [])[:5]:
             content.append({"type": "image", "source": {
                 "type": "base64", "media_type": m["mediaType"], "data": m["base64"]}})
-        content.append({"type": "text", "text": body.get("userText") or " "})
+        content.append({"type": "text", "text": body.get("userText") or _KICKOFF})
         messages = [{"role": "user", "content": content}]
 
     payload: Dict[str, Any] = {
@@ -114,7 +119,7 @@ def _call_google(model: str, body: Dict[str, Any]) -> str:
         parts: List[Dict[str, Any]] = []
         for m in (body.get("media") or [])[:5]:
             parts.append({"inlineData": {"mimeType": m["mediaType"], "data": m["base64"]}})
-        parts.append({"text": body.get("userText") or " "})
+        parts.append({"text": body.get("userText") or _KICKOFF})
         contents = [{"role": "user", "parts": parts}]
 
     generation_config: Dict[str, Any] = {"maxOutputTokens": _max_tokens(body)}
@@ -155,8 +160,8 @@ def _call_deepseek(model: str, body: Dict[str, Any]) -> str:
     if history:
         for m in history:
             messages.append({"role": m["role"], "content": m["content"]})
-    elif body.get("userText"):
-        messages.append({"role": "user", "content": body["userText"]})
+    else:
+        messages.append({"role": "user", "content": body.get("userText") or _KICKOFF})
 
     r = requests.post(
         "https://api.deepseek.com/chat/completions",
