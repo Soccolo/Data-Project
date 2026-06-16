@@ -289,9 +289,13 @@ def _find_candidate(client: Any, me: Dict[str, Any], prefs: Dict[str, Any]) -> O
     except Exception:  # noqa: BLE001
         pass
 
+    # Anyone you already have a meet with (pending or matched) is excluded, so a
+    # second, separate Dara-to-Dara conversation never gets generated for a pair.
+    connected = _connected_ids(client, me_id)
+
     ranked: List[tuple] = []
     for r in rows:
-        if r.get("id") in passed:
+        if r.get("id") in passed or r.get("id") in connected:
             continue
         if not _matches_prefs(r.get("basics") or {}, prefs):
             continue
@@ -308,6 +312,21 @@ def _find_candidate(client: Any, me: Dict[str, Any], prefs: Dict[str, Any]) -> O
     except Exception:  # noqa: BLE001
         chosen["_photos"] = []
     return chosen
+
+
+def _connected_ids(client: Any, uid: str) -> set:
+    """Ids of everyone the user already has a meet with (either direction)."""
+    ids: set = set()
+    try:
+        res = (client.table("meets").select("proposer_id,recipient_id")
+               .or_(f"proposer_id.eq.{uid},recipient_id.eq.{uid}").execute())
+        for m in res.data or []:
+            ids.add(m.get("proposer_id"))
+            ids.add(m.get("recipient_id"))
+        ids.discard(uid)
+    except Exception:  # noqa: BLE001
+        pass
+    return ids
 
 
 def _pick_seed(prefs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
