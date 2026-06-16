@@ -172,6 +172,8 @@ def sidebar() -> None:
             st.divider()
             if st.button("✦  Home", use_container_width=True):
                 go("home")
+            if st.button("💬  Matches", use_container_width=True):
+                go("matches")
             if st.button("👤  Account", use_container_width=True):
                 go("account")
             st.divider()
@@ -187,8 +189,10 @@ def sidebar() -> None:
                 "Tier", tiers, index=tiers.index(current_tier()),
                 help="Drives model routing. Higher tiers route sensitive calls to Claude.",
             )
+            st.divider()
+            if st.button("💬  Matches", use_container_width=True):
+                go("matches")
             if st.session_state.get("view") != "home":
-                st.divider()
                 if st.button("← Back to start", use_container_width=True):
                     reset()
                     go("home")
