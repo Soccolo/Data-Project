@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import streamlit as st
 
-from dara import call_ai
-from dara import schemas
+from dara import call_ai, matching
 from .common import current_tier, model_caption
+from . import session
 
 # Number of questions Dara asks before offering to reveal a match.
 _MAX_TURNS = 5
@@ -15,13 +15,6 @@ _SYSTEM = (
     "You are Dara, a warm, curious matchmaker interviewing a new user to learn "
     "who they are. Ask one short question at a time. Reflect briefly on what they "
     "said before asking the next. Keep it to two sentences."
-)
-
-_SCORE_SYSTEM = (
-    "You are Dara, turning a matchmaking interview into a compatibility verdict "
-    "for this user about a candidate Dara found. Based on the conversation, return "
-    "JSON with: score (integer 0-100), verdict (one short, warm sentence), and "
-    "reasons (3 short, specific strings). Ground every reason in what they said."
 )
 
 
@@ -35,6 +28,16 @@ def _ask(**kwargs):
 
 def _messages() -> list[dict]:
     return st.session_state.setdefault("iv_messages", [])
+
+
+def _client():
+    """The Supabase client, but only when there's a signed-in user — so
+    matchmaking runs against real people. None in the no-auth PoC, which makes
+    the matcher simulate a candidate."""
+    try:
+        return session.get_client() if session.current_user() else None
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def render() -> None:
@@ -67,24 +70,14 @@ def render() -> None:
     # conversation off.)
     if user_turns >= _MAX_TURNS:
         st.success("I've got enough to go on whenever you're ready — or keep talking.")
-        if st.button("See who Dara found →", use_container_width=True):
+        if st.button("See who Dara found →", type="primary", use_container_width=True):
             with st.spinner("Talking to other Daras…"):
-                # The scoring request must END ON A USER TURN. Newer Claude
-                # models reject a conversation that ends on an assistant message
-                # (no assistant prefill), and the transcript ends with Dara's
-                # last question — so append an explicit "score it now" turn.
-                score_history = msgs + [{
-                    "role": "user",
-                    "content": "Based on everything I've shared, give me the compatibility verdict now.",
-                }]
-                raw, err = _ask(
-                    purpose="score", system_prompt=_SCORE_SYSTEM, tier=current_tier(),
-                    history=score_history, schema=schemas.SCORE, max_tokens=700,
+                st.session_state["iv_match"] = matching.find_match(
+                    conversation=msgs,
+                    tier=current_tier(),
+                    client=_client(),
+                    me=session.current_profile(),
                 )
-            if err:
-                st.error(f"Couldn't score the match: {err}")
-                return
-            st.session_state["iv_match"] = schemas.normalize_score(raw)
             st.rerun()
 
     prompt = st.chat_input("Tell Dara…")
@@ -103,18 +96,53 @@ def render() -> None:
 
 
 def _render_match(match: dict) -> None:
+    cand = match.get("candidate") or {}
+    cb = cand.get("basics") or {}
+    photos = cand.get("_photos") or []
+    fit = match.get("photo_fit") or {}
+
     with st.container(border=True):
-        st.subheader("Your match")
+        st.subheader(f"Your match: {cb.get('name', 'Someone')}")
+        if photos and photos[0].get("signed_url"):
+            st.image(photos[0]["signed_url"], use_container_width=True)
+
+        meta = []
+        if cb.get("age"):
+            meta.append(str(cb["age"]))
+        if cb.get("job"):
+            meta.append(cb["job"])
+        if cb.get("nationality"):
+            meta.append(cb["nationality"])
+        if cb.get("height_cm"):
+            meta.append(f"{cb['height_cm']}cm")
+        if meta:
+            st.caption(" · ".join(meta))
+        if cb.get("bio"):
+            st.write(cb["bio"])
+
         st.metric("Compatibility", f"{match.get('score', 0)}%",
-                  help="Dara's verdict after the proxy conversation.")
+                  help="Dara's verdict after weighing your interview, preferences, and photos.")
         if match.get("verdict"):
             st.write(f"**{match['verdict']}**")
         for r in match.get("reasons", []):
             st.write(f"• {r}")
 
+        if fit.get("impression"):
+            st.divider()
+            st.caption("Dara's read of their photos")
+            st.write(fit["impression"])
+            if fit.get("vibe_tags"):
+                st.caption(" · ".join(fit["vibe_tags"]))
+
+    if match.get("simulated"):
+        st.caption(
+            "Demo candidate — once other registered users fit your preferences, Dara "
+            "matches against real people and analyses their actual photos."
+        )
+
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("Propose a meet", use_container_width=True):
+        if st.button("Propose a meet", type="primary", use_container_width=True):
             st.toast("In the full app this sends a meet proposal.", icon="✨")
     with col2:
         if st.button("Start over", use_container_width=True):
