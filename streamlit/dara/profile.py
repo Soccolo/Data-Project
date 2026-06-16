@@ -89,6 +89,15 @@ def complete_onboarding(
     return update_profile(client, user_id, username=username, kind=kind, basics=basics, profile=profile)
 
 
+def mark_onboarded(client: Client, user_id: str, current: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Flip the onboarded flag once the profile wizard finishes. Used when the
+    basics were already saved step-by-step during the wizard."""
+    current = current or get_profile(client, user_id) or {}
+    profile = dict(current.get("profile") or {})
+    profile["onboarded"] = True
+    return update_profile(client, user_id, profile=profile)
+
+
 def username_available(client: Client, username: str, exclude_user_id: Optional[str] = None) -> bool:
     res = client.table("users").select("id").ilike("username", username).execute()
     rows = res.data or []
