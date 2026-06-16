@@ -5,6 +5,7 @@ from __future__ import annotations
 import streamlit as st
 
 from dara import call_ai, matching, meets
+from dara import profile as profile_service
 from .common import current_tier, model_caption, go
 from . import session
 
@@ -26,8 +27,34 @@ def _ask(**kwargs):
         return None, str(e)
 
 
+def _draft_ctx():
+    """(client, uid) when signed in, else (None, None). Drafts only persist for
+    signed-in users; the no-auth PoC keeps the conversation in session only."""
+    client = _client()
+    uid = session.user_id()
+    return (client, uid) if (client and uid) else (None, None)
+
+
 def _messages() -> list[dict]:
-    return st.session_state.setdefault("iv_messages", [])
+    # First access this session: restore any saved draft (survives a refresh).
+    if "iv_messages" not in st.session_state:
+        client, uid = _draft_ctx()
+        st.session_state["iv_messages"] = (
+            profile_service.load_interview_draft(client, uid) if (client and uid) else []
+        )
+    return st.session_state["iv_messages"]
+
+
+def _save_draft(msgs) -> None:
+    client, uid = _draft_ctx()
+    if client and uid:
+        profile_service.save_interview_draft(client, uid, msgs)
+
+
+def _clear_draft() -> None:
+    client, uid = _draft_ctx()
+    if client and uid:
+        profile_service.clear_interview_draft(client, uid)
 
 
 def _client():
@@ -52,6 +79,7 @@ def render() -> None:
             st.error(f"Dara couldn't start: {err}")
             return
         msgs.append({"role": "assistant", "content": opener})
+        _save_draft(msgs)
 
     user_turns = sum(1 for m in msgs if m["role"] == "user")
 
@@ -84,6 +112,7 @@ def render() -> None:
                 on_turn=_on_turn,
             )
             progress.empty()
+            _clear_draft()  # interview finished — draft no longer needed
             st.rerun()
 
     prompt = st.chat_input("Tell Dara…")
@@ -98,6 +127,7 @@ def render() -> None:
             st.error(f"Dara didn't respond: {err}")
         else:
             msgs.append({"role": "assistant", "content": reply})
+            _save_draft(msgs)
         st.rerun()
 
 
@@ -170,6 +200,7 @@ def _render_match(match: dict) -> None:
             _connect(match)
     with col2:
         if st.button("Start over", use_container_width=True):
+            _clear_draft()
             for k in ("iv_messages", "iv_match"):
                 st.session_state.pop(k, None)
             st.rerun()
