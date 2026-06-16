@@ -6,7 +6,7 @@ import streamlit as st
 
 from dara import call_ai, matching, meets
 from dara import profile as profile_service
-from .common import current_tier, model_caption, go
+from .common import current_tier, model_caption, go, render_portrait
 from . import session
 
 # Number of questions Dara asks before offering to reveal a match.
@@ -92,28 +92,27 @@ def render() -> None:
         _render_match(st.session_state["iv_match"])
         return
 
-    # Once Dara has enough to go on, offer the match — but DON'T return here, so
-    # the chat input below still renders and the user can keep talking if they
-    # want. (The early return that used to live here is what cut the
-    # conversation off.)
+    if st.session_state.get("iv_portrait"):
+        _render_portrait_screen(st.session_state["iv_portrait"], msgs)
+        return
+
+    # Once Dara has enough to go on, offer to finish (build the profile) or jump
+    # to a match — but DON'T return here, so the chat input below still renders
+    # and the user can keep talking if they want.
     if user_turns >= _MAX_TURNS:
         st.success("I've got enough to go on whenever you're ready — or keep talking.")
-        if st.button("See who Dara found →", type="primary", use_container_width=True):
-            progress = st.progress(0.0, text="Your Daras are getting to know each other…")
-
-            def _on_turn(i, total, _convo):
-                progress.progress(i / total, text=f"Dara-to-Dara conversation… {i}/{total} messages")
-
-            st.session_state["iv_match"] = matching.find_match(
-                conversation=msgs,
-                tier=current_tier(),
-                client=_client(),
-                me=session.current_profile(),
-                on_turn=_on_turn,
-            )
-            progress.empty()
-            _clear_draft()  # interview finished — draft no longer needed
-            st.rerun()
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("See what Dara learned", use_container_width=True):
+                with st.spinner("Dara is writing up what it learned…"):
+                    st.session_state["iv_portrait"] = matching.get_or_build_portrait(
+                        session.current_profile() or {"basics": {}}, msgs, current_tier(), _client(),
+                    )
+                _clear_draft()
+                st.rerun()
+        with c2:
+            if st.button("See who Dara found →", type="primary", use_container_width=True):
+                _reveal_match(msgs)
 
     prompt = st.chat_input("Tell Dara…")
     if prompt:
@@ -129,6 +128,32 @@ def render() -> None:
             msgs.append({"role": "assistant", "content": reply})
             _save_draft(msgs)
         st.rerun()
+
+
+def _reveal_match(msgs: list) -> None:
+    """Run the match and stream the Dara-to-Dara conversation live, message by
+    message, into a placeholder — then show the full match card on rerun."""
+    holder = st.empty()
+
+    def _on_turn(i, total, convo):
+        with holder.container():
+            st.caption(f"Your Daras are talking… {i}/{total}")
+            for m in convo:
+                is_me = m.get("speaker") == "me"
+                with st.chat_message("user" if is_me else "assistant", avatar=None if is_me else "✨"):
+                    st.write(m.get("content", ""))
+
+    st.session_state["iv_match"] = matching.find_match(
+        conversation=msgs,
+        tier=current_tier(),
+        client=_client(),
+        me=session.current_profile(),
+        on_turn=_on_turn,
+    )
+    holder.empty()
+    st.session_state.pop("iv_portrait", None)
+    _clear_draft()
+    st.rerun()
 
 
 def _render_match(match: dict) -> None:
@@ -201,7 +226,25 @@ def _render_match(match: dict) -> None:
     with col2:
         if st.button("Start over", use_container_width=True):
             _clear_draft()
-            for k in ("iv_messages", "iv_match"):
+            for k in ("iv_messages", "iv_match", "iv_portrait"):
+                st.session_state.pop(k, None)
+            st.rerun()
+
+
+def _render_portrait_screen(portrait: dict, msgs: list) -> None:
+    st.subheader("What Dara learned about you")
+    st.caption("Dara's impression from your interview — a read on how you came across, not a clinical test.")
+    render_portrait(portrait)
+
+    st.divider()
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("See who Dara found →", type="primary", use_container_width=True):
+            _reveal_match(msgs)
+    with c2:
+        if st.button("Start over", use_container_width=True):
+            _clear_draft()
+            for k in ("iv_messages", "iv_match", "iv_portrait"):
                 st.session_state.pop(k, None)
             st.rerun()
 
@@ -216,7 +259,12 @@ def _connect(match: dict) -> None:
         if not (client and me):
             st.session_state["iv_connect_msg"] = "Sign in to connect with real users."
             st.rerun()
-        res = meets.connect(client, me, cand)
+        res = meets.connect(client, me, cand, match_data={
+            "transcript": match.get("transcript") or [],
+            "score": match.get("score"),
+            "verdict": match.get("verdict"),
+            "reasons": match.get("reasons") or [],
+        })
         if res.get("matched"):
             go("matches")  # already a match → jump straight to the chat list
         else:
