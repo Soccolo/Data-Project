@@ -125,6 +125,11 @@ def _preferences(prof: dict) -> None:
             help="A soft preference Dara weighs — not a hard filter.",
         )
         dealbreakers = st.text_area("Dealbreakers (optional)", value=p["dealbreakers"], height=70)
+        physical_prefs = st.text_area(
+            "Physical preferences (optional)", value=p.get("physical_prefs", ""), height=70,
+            help="e.g. 'long hair, taller than me'. Dara checks this against photos — visible "
+                 "traits only, never anything protected.",
+        )
         submitted = st.form_submit_button("Save preferences", use_container_width=True)
 
     if submitted:
@@ -134,6 +139,7 @@ def _preferences(prof: dict) -> None:
             "height_min_cm": height_range[0], "height_max_cm": height_range[1],
             "nationalities": [n.strip() for n in nationalities.split(",") if n.strip()],
             "intent": intent, "dealbreakers": dealbreakers.strip(),
+            "physical_prefs": physical_prefs.strip(),
         }
         profile_json = {**(prof.get("profile") or {}), "preferences": new_prefs}
         try:
