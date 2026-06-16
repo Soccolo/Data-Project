@@ -66,6 +66,13 @@ def mock_response(
         return lead + _INTERVIEW_QUESTIONS[idx]
 
     if purpose == "intake":
+        if schema:
+            return json.dumps({
+                "summary": "Felt sidelined by a last-minute change and wants to feel considered and looped in early.",
+                "needs": ["to feel considered", "advance notice", "acknowledgement"],
+                "safe": True,
+                "safety_reason": "",
+            })
         idx = min(user_turns, len(_INTAKE_QUESTIONS) - 1)
         lead = "" if user_turns == 0 else _reflect(user_text) + " "
         return lead + _INTAKE_QUESTIONS[idx]
