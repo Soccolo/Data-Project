@@ -39,6 +39,26 @@ MEDIATION: Dict[str, Any] = {
     "required": ["messages"],
 }
 
+# Personality portrait distilled from the interview. Mirrors the shape of the
+# seed candidates' ``portrait`` so interviewed users and seeds are interchangeable
+# in the proxy step. ``speech_notes`` + ``recent_messages`` drive voice matching.
+PORTRAIT: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "interests": {"type": "array", "items": {"type": "string"}},
+        "values": {"type": "array", "items": {"type": "string"}},
+        "communication_style": {"type": "string"},
+        "humor_style": {"type": "string"},
+        "looking_for": {"type": "string"},
+        "dealbreakers": {"type": "array", "items": {"type": "string"}},
+        "observations": {"type": "array", "items": {"type": "string"}},
+        "speech_notes": {"type": "string"},
+        "recent_messages": {"type": "array", "items": {"type": "string"}},
+        "vibe": {"type": "string"},
+    },
+    "required": ["communication_style", "speech_notes"],
+}
+
 # Photo read. Deliberately about what a photo legitimately shows — overall
 # vibe, setting, presentation — NOT protected attributes (ethnicity,
 # nationality, exact age), which can't be reliably or fairly inferred from a face.
@@ -85,6 +105,31 @@ def normalize_messages(d: Any) -> List[str]:
     if not isinstance(msgs, list):
         msgs = []
     return [str(m) for m in msgs if str(m).strip()][:5]
+
+
+def normalize_portrait(d: Any) -> Dict[str, Any]:
+    d = d if isinstance(d, dict) else {}
+
+    def _list(key: str, limit: int) -> List[str]:
+        v = d.get(key) or []
+        if isinstance(v, str):
+            v = [v]
+        if not isinstance(v, list):
+            v = []
+        return [str(x).strip() for x in v if str(x).strip()][:limit]
+
+    return {
+        "interests": _list("interests", 8),
+        "values": _list("values", 8),
+        "communication_style": str(d.get("communication_style") or "natural").strip(),
+        "humor_style": str(d.get("humor_style") or "").strip(),
+        "looking_for": str(d.get("looking_for") or "").strip(),
+        "dealbreakers": _list("dealbreakers", 6),
+        "observations": _list("observations", 6),
+        "speech_notes": str(d.get("speech_notes") or "").strip(),
+        "recent_messages": _list("recent_messages", 5),
+        "vibe": str(d.get("vibe") or "").strip(),
+    }
 
 
 def normalize_photo_fit(d: Any) -> Dict[str, Any]:
