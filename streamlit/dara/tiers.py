@@ -131,3 +131,11 @@ TIER_INFO: Dict[Tier, TierInfo] = {
 }
 
 TIER_ORDER: tuple[Tier, ...] = ("free", "pro", "x")
+
+# How many new potential matches a Dara will start conversations with per day,
+# by tier. Free gets a taste; it scales up from there.
+TIER_DAILY_MATCHES: Dict[Tier, int] = {"free": 3, "pro": 10, "x": 25}
+
+
+def daily_match_limit(tier: Tier) -> int:
+    return TIER_DAILY_MATCHES.get(tier, TIER_DAILY_MATCHES["free"])
