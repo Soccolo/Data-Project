@@ -10,6 +10,7 @@ from __future__ import annotations
 import streamlit as st
 
 from dara import matching, meets
+from dara import conflicts
 from dara import profile as profile_service
 from . import session
 from .common import current_tier, go, rule
@@ -103,6 +104,38 @@ def _list() -> None:
             if st.button("Open chat", key=f"open_{c['kind']}_{c['id']}", use_container_width=True):
                 st.session_state["match_open"] = c
                 st.rerun()
+
+    # Mediations live here too, so everything you're in flight on is in one place.
+    if client and uid:
+        sessions = conflicts.list_sessions(client, uid)
+        if sessions:
+            st.subheader("Mediations")
+            for s in sessions:
+                role = conflicts.role_of(s, uid)
+                other = conflicts.name_of(s, conflicts.other_role(role))
+                with st.container(border=True):
+                    st.write(f"**{s['topic']}**  ·  with {other}")
+                    st.caption(_med_status(s, uid))
+                    if st.button("Open", key=f"medopen_{s['id']}", use_container_width=True):
+                        st.session_state["med_open"] = s["id"]
+                        go("mediation")
+
+
+def _med_status(s: dict, uid: str) -> str:
+    status = s.get("status")
+    if status == "complete":
+        return "Complete — open to read the takeaway"
+    if status == "safety-stopped":
+        return "Stopped for safety"
+    if status == "declined":
+        return "Declined"
+    if status == "mediating":
+        return "The Daras are mediating…"
+    if status == "invited":
+        return ("Invitation — needs your response"
+                if conflicts.role_of(s, uid) == "invitee" else "Waiting for them to accept")
+    mine_done = conflicts.side(s, conflicts.role_of(s, uid)).get("complete")
+    return "Waiting for the other person's intake" if mine_done else "Your intake is open"
 
 
 # ─── Person card helpers ─────────────────────────────────────────────
