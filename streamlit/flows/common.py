@@ -143,6 +143,62 @@ def steps(active: int, labels: list[str]) -> None:
     st.markdown(f'<div class="dara-steps">{pills}</div>', unsafe_allow_html=True)
 
 
+_OCEAN_TRAITS = [
+    ("openness", "Openness",
+     ("grounded and practical", "a mix of routine and novelty", "curious, imaginative, open to new things")),
+    ("conscientiousness", "Conscientiousness",
+     ("spontaneous and flexible", "organised when it counts", "organised, reliable, plan-oriented")),
+    ("extraversion", "Extraversion",
+     ("reserved, recharges in quiet", "comfortable either way", "outgoing, energised by people")),
+    ("agreeableness", "Agreeableness",
+     ("direct, holds their own line", "warm but willing to push back", "warm, cooperative, easy-going")),
+    ("neuroticism", "Emotional sensitivity",
+     ("calm and even-keeled", "generally steady", "feels things deeply, sensitive to stress")),
+]
+
+
+def _ocean_phrase(triplet, score: int) -> str:
+    low, mid, high = triplet
+    return low if score < 40 else (high if score > 65 else mid)
+
+
+def render_portrait(portrait: dict) -> None:
+    """Shared 'what Dara learned' view — OCEAN bars with one-line reads, speaking
+    style, interests, values, notes. Used by the interview screen and Account."""
+    bf = (portrait or {}).get("big_five") or {}
+    if any(bf.get(k) is not None for k, _, _ in _OCEAN_TRAITS):
+        st.subheader("Personality (OCEAN)")
+        for key, label, triplet in _OCEAN_TRAITS:
+            v = bf.get(key)
+            if v is None:
+                continue
+            v = int(v)
+            st.progress(v / 100, text=f"{label} · {v}")
+            st.caption(_ocean_phrase(triplet, v))
+
+    if portrait.get("speech_notes"):
+        st.subheader("How you talk")
+        st.write(portrait["speech_notes"])
+
+    cols = st.columns(2)
+    if portrait.get("interests"):
+        with cols[0]:
+            st.subheader("Interests")
+            st.write(", ".join(portrait["interests"]))
+    if portrait.get("values"):
+        with cols[1]:
+            st.subheader("Values")
+            st.write(", ".join(portrait["values"]))
+
+    if portrait.get("observations"):
+        st.subheader("Notes")
+        for o in portrait["observations"]:
+            st.write(f"• {o}")
+
+    if portrait.get("vibe"):
+        st.caption(f"Overall vibe: {portrait['vibe']}")
+
+
 def go(view: str) -> None:
     """Switch the active view and rerun."""
     st.session_state["view"] = view
