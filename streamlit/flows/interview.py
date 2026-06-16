@@ -71,13 +71,19 @@ def render() -> None:
     if user_turns >= _MAX_TURNS:
         st.success("I've got enough to go on whenever you're ready — or keep talking.")
         if st.button("See who Dara found →", type="primary", use_container_width=True):
-            with st.spinner("Talking to other Daras…"):
-                st.session_state["iv_match"] = matching.find_match(
-                    conversation=msgs,
-                    tier=current_tier(),
-                    client=_client(),
-                    me=session.current_profile(),
-                )
+            progress = st.progress(0.0, text="Your Daras are getting to know each other…")
+
+            def _on_turn(i, total, _convo):
+                progress.progress(i / total, text=f"Dara-to-Dara conversation… {i}/{total} messages")
+
+            st.session_state["iv_match"] = matching.find_match(
+                conversation=msgs,
+                tier=current_tier(),
+                client=_client(),
+                me=session.current_profile(),
+                on_turn=_on_turn,
+            )
+            progress.empty()
             st.rerun()
 
     prompt = st.chat_input("Tell Dara…")
@@ -121,7 +127,7 @@ def _render_match(match: dict) -> None:
             st.write(cb["bio"])
 
         st.metric("Compatibility", f"{match.get('score', 0)}%",
-                  help="Dara's verdict after weighing your interview, preferences, and photos.")
+                  help="Dara's verdict after the Dara-to-Dara conversation, your preferences, and the photo read.")
         if match.get("verdict"):
             st.write(f"**{match['verdict']}**")
         for r in match.get("reasons", []):
@@ -134,9 +140,24 @@ def _render_match(match: dict) -> None:
             if fit.get("vibe_tags"):
                 st.caption(" · ".join(fit["vibe_tags"]))
 
-    if match.get("simulated"):
+    transcript = match.get("transcript") or []
+    if transcript:
+        me_name = match.get("me_name", "You")
+        their_name = cb.get("name", "Them")
+        with st.expander(f"Read the {me_name}-to-{their_name} conversation · {len(transcript)} messages"):
+            for m in transcript:
+                who = me_name if m.get("speaker") == "me" else their_name
+                st.markdown(f"**{who}:** {m.get('content', '')}")
+
+    source = match.get("source")
+    if source == "seed":
         st.caption(
-            "Demo candidate — once other registered users fit your preferences, Dara "
+            "Test candidate from the built-in seed pool. Once other real users fit your "
+            "preferences, Dara matches against them and reads their actual photos."
+        )
+    elif source == "simulated":
+        st.caption(
+            "Simulated candidate — add registered users who fit your preferences and Dara "
             "matches against real people and analyses their actual photos."
         )
 
