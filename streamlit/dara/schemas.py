@@ -39,6 +39,19 @@ MEDIATION: Dict[str, Any] = {
     "required": ["messages"],
 }
 
+# Photo read. Deliberately about what a photo legitimately shows — overall
+# vibe, setting, presentation — NOT protected attributes (ethnicity,
+# nationality, exact age), which can't be reliably or fairly inferred from a face.
+PHOTO_FIT: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "impression": {"type": "string"},
+        "vibe_tags": {"type": "array", "items": {"type": "string"}},
+        "fit_comment": {"type": "string"},
+    },
+    "required": ["impression", "vibe_tags", "fit_comment"],
+}
+
 
 # ─── Normalizers ─────────────────────────────────────────────────────
 def normalize_score(d: Any) -> Dict[str, Any]:
@@ -72,3 +85,17 @@ def normalize_messages(d: Any) -> List[str]:
     if not isinstance(msgs, list):
         msgs = []
     return [str(m) for m in msgs if str(m).strip()][:5]
+
+
+def normalize_photo_fit(d: Any) -> Dict[str, Any]:
+    d = d if isinstance(d, dict) else {}
+    tags = d.get("vibe_tags") or []
+    if isinstance(tags, str):
+        tags = [tags]
+    if not isinstance(tags, list):
+        tags = []
+    return {
+        "impression": str(d.get("impression") or "").strip(),
+        "vibe_tags": [str(t) for t in tags if str(t).strip()][:6],
+        "fit_comment": str(d.get("fit_comment") or "").strip(),
+    }
