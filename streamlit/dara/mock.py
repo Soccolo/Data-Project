@@ -92,10 +92,19 @@ def mock_response(
         })
 
     if purpose == "proxyTurn":
-        return (
-            "So tell me about yours — what do they actually care about, "
-            "underneath the small talk?"
-        )
+        lines = [
+            "ok hi — so what actually pulls your attention these days?",
+            "love that. is it the thing itself or the people around it?",
+            "honestly same. what does a good weekend look like for you?",
+            "noted. i'm more of a long-walk-then-too-much-coffee person",
+            "what's something you'd want someone to just get without explaining?",
+            "that's a good answer. what tends to make you click with someone?",
+            "fair. what are you actually hoping to find here — no wrong answer",
+            "i like how you put that. what would you rather do on a first date?",
+            "ha, bold. what's a small thing that reliably makes your day better?",
+            "ok i'm into this conversation. what's been on your mind lately?",
+        ]
+        return json.dumps({"message": _rng.choice(lines)}) if schema else _rng.choice(lines)
 
     if purpose == "mediation":
         a = names.get("a", "Partner A")
