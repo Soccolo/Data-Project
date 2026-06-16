@@ -14,6 +14,7 @@ Tier = Literal["free", "pro", "x"]
 
 Purpose = Literal[
     "interview",            # Dara learning who you are — voice matters
+    "profile",              # distil the interview into a stored JSON portrait
     "photoAnalysis",        # vision call
     "compatibilityFilter",  # cheap soft gate before proxy
     "proxyTurn",            # Dara-to-Dara matching conversation (HIGH VOLUME)
@@ -49,6 +50,7 @@ class ModelChoice:
 _ROUTES: Dict[Tier, Dict[Purpose, ModelChoice]] = {
     "free": {
         "interview":           ModelChoice("google",    "gemini-2.5-flash",          "Gemini Flash"),
+        "profile":             ModelChoice("google",    "gemini-2.5-flash",          "Gemini Flash"),
         "photoAnalysis":       ModelChoice("google",    "gemini-2.5-flash",          "Gemini Flash"),
         "compatibilityFilter": ModelChoice("google",    "gemini-2.5-flash",          "Gemini Flash"),
         "proxyTurn":           ModelChoice("google",    "gemini-2.5-flash",          "Gemini Flash"),
@@ -60,6 +62,7 @@ _ROUTES: Dict[Tier, Dict[Purpose, ModelChoice]] = {
     },
     "pro": {
         "interview":           ModelChoice("anthropic", "claude-sonnet-4-6",         "Claude Sonnet"),
+        "profile":             ModelChoice("anthropic", "claude-sonnet-4-6",         "Claude Sonnet"),
         "photoAnalysis":       ModelChoice("anthropic", "claude-sonnet-4-6",         "Claude Sonnet"),
         "compatibilityFilter": ModelChoice("google",    "gemini-2.5-flash",          "Gemini Flash"),
         "proxyTurn":           ModelChoice("google",    "gemini-2.5-flash",          "Gemini Flash"),
@@ -71,6 +74,7 @@ _ROUTES: Dict[Tier, Dict[Purpose, ModelChoice]] = {
     },
     "x": {
         "interview":           ModelChoice("anthropic", "claude-sonnet-4-6",         "Claude Sonnet"),
+        "profile":             ModelChoice("anthropic", "claude-sonnet-4-6",         "Claude Sonnet"),
         "photoAnalysis":       ModelChoice("anthropic", "claude-sonnet-4-6",         "Claude Sonnet"),
         "compatibilityFilter": ModelChoice("anthropic", "claude-haiku-4-5-20251001", "Claude Haiku"),
         "proxyTurn":           ModelChoice("anthropic", "claude-sonnet-4-6",         "Claude Sonnet"),
