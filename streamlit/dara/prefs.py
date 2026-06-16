@@ -42,6 +42,7 @@ def default_preferences() -> Dict[str, Any]:
         "nationalities": [],   # soft preference — weighed, never a hard gate
         "intent": INTENTS[0],
         "dealbreakers": "",
+        "physical_prefs": "",  # free-text physical wants, checked against photos
     }
 
 
@@ -87,4 +88,6 @@ def summarize_preferences(prefs: Dict[str, Any]) -> str:
         parts.append("soft preference toward: " + ", ".join(p["nationalities"]))
     if (p.get("dealbreakers") or "").strip():
         parts.append(f"dealbreakers: {p['dealbreakers'].strip()}")
+    if (p.get("physical_prefs") or "").strip():
+        parts.append(f"physically drawn to: {p['physical_prefs'].strip()}")
     return "; ".join(parts) + "."
