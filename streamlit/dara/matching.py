@@ -22,9 +22,14 @@ from . import profile as profile_service
 from . import schemas
 from .ai_client import call_ai
 from .config import settings
-from .tiers import Tier
+from .tiers import Tier, effective_tier
 
 _rng = random.Random(11)
+
+PROXY_TURNS_EACH_SIDE = 10  # 20 messages total in a Dara-to-Dara conversation
+
+# Dara-to-Dara conversation length, per the Mira original: 10 turns each side.
+PROXY_TURNS_EACH_SIDE = 10
 
 _SCORE_SYSTEM = (
     "You are Dara, turning a matchmaking interview into a compatibility verdict "
@@ -95,6 +100,178 @@ def get_or_build_portrait(me, conversation, tier: Tier = "free", client: Any = N
         except Exception:  # noqa: BLE001
             pass
     return portrait
+
+
+# ─── Dara-to-Dara proxy conversation ─────────────────────────────────
+def _proxy_system(portrait, my_basics, their_basics, conversation, total_turns) -> str:
+    """Roleplay prompt: speak as my_basics in their own voice, drawn from the
+    portrait. Mirrors Mira's proxy roleplay — voice fidelity + anti-hallucination."""
+    me_name = my_basics.get("name", "You")
+    their_name = their_basics.get("name", "them")
+    interests = ", ".join(portrait.get("interests") or []) or "unspecified"
+    values = ", ".join(portrait.get("values") or []) or "unspecified"
+    samples = portrait.get("recent_messages") or []
+    voice_block = (
+        "Examples of how they ACTUALLY write (match this exactly — casing, "
+        "punctuation, length, slang):\n" + "\n".join(f"> {m}" for m in samples)
+        if samples else "(no samples — follow the speech notes)"
+    )
+    convo_lines = (
+        "\n".join(
+            f"{me_name if m['speaker'] == 'me' else their_name}: {m['content']}"
+            for m in conversation
+        )
+        if conversation
+        else "[You're starting. Send a warm, on-brand opener in your voice.]"
+    )
+    return (
+        f"You are roleplaying {me_name} in a getting-to-know-you conversation with "
+        f"{their_name}. You ARE {me_name}. Speaking in their exact voice matters more "
+        f"than anything else — {me_name} will read this transcript.\n\n"
+        f"Who you are: {prefs_mod.summarize_self(my_basics)}\n"
+        f"Communication style: {portrait.get('communication_style', 'natural')}. "
+        f"Humor: {portrait.get('humor_style', 'unspecified')}.\n"
+        f"Pulled toward: {interests}. Values: {values}.\n"
+        f"Looking for: {portrait.get('looking_for', 'unspecified')}.\n\n"
+        f"VOICE — write exactly like this:\n{portrait.get('speech_notes', '(natural)')}\n{voice_block}\n\n"
+        f"Who they are (so you know what to react to): {prefs_mod.summarize_self(their_basics)}\n\n"
+        "RULES:\n"
+        "- If you're curious about something, ASK IT NOW — there is no 'later'.\n"
+        "- Share your own concrete facts willingly when they come up; don't be evasive.\n"
+        "- NEVER invent specifics you weren't given (employer, neighbourhood, names, "
+        "trips). If asked something you don't know, defer warmly — 'i'll tell you when "
+        "we actually meet' — in your voice. Inventing breaks trust when they read this.\n"
+        "- Keep messages SHORT (1-3 sentences). React naturally.\n\n"
+        f"You have ~{total_turns} messages total. Conversation so far "
+        f"({len(conversation)} of ~{total_turns}):\n{convo_lines}\n\n"
+        'Output strict JSON, no markdown: {"message": "your next message in your exact voice"}'
+    )
+
+
+def run_proxy(me_portrait, me_basics, cand_portrait, cand_basics,
+              tier: Tier = "free", turns_each: int = PROXY_TURNS_EACH_SIDE, on_turn=None):
+    """Alternate turns between the two agents. Returns a transcript list of
+    ``{"speaker": "me"|"them", "content": str}`` ("me" = the user's side)."""
+    convo: List[Dict[str, str]] = []
+    total = turns_each * 2
+    for turn in range(total):
+        is_me = (turn % 2 == 0)
+        speaker = "me" if is_me else "them"
+        portrait = me_portrait if is_me else cand_portrait
+        my_b = me_basics if is_me else cand_basics
+        their_b = cand_basics if is_me else me_basics
+        # Recast the running transcript to the current speaker's perspective.
+        perspective = [
+            {"speaker": "me" if m["speaker"] == speaker else "them", "content": m["content"]}
+            for m in convo
+        ]
+        try:
+            raw = call_ai(
+                purpose="proxyTurn",
+                system_prompt=_proxy_system(portrait, my_b, their_b, perspective, total),
+                tier=tier, user_text="Send your next message.", schema=schemas.PROXY,
+            )
+            msg = schemas.normalize_proxy(raw)
+        except Exception:  # noqa: BLE001
+            msg = ""
+        convo.append({"speaker": speaker, "content": msg or "…"})
+        if on_turn:
+            try:
+                on_turn(turn + 1, total, list(convo))
+            except Exception:  # noqa: BLE001
+                pass
+    return convo
+
+
+# ─── Dara-to-Dara proxy conversation ─────────────────────────────────
+def _proxy_system(portrait, my_basics, their_basics, total_turns, conversation) -> str:
+    name = my_basics.get("name", "you")
+    their_name = their_basics.get("name", "them")
+    speech = portrait.get("speech_notes") or ""
+    samples = portrait.get("recent_messages") or []
+    sample_block = ""
+    if samples:
+        joined = "\n".join(f"> {s}" for s in samples)
+        sample_block = (
+            f"\nExamples of how {name} ACTUALLY writes (match this exactly — casing, "
+            f"punctuation, length, slang):\n{joined}\n"
+        )
+    convo_block = (
+        "[You're starting. Send a warm, on-brand opener in your voice.]"
+        if not conversation else
+        "\n".join(
+            f"{name if m['speaker'] == 'me' else their_name}: {m['content']}"
+            for m in conversation
+        )
+    )
+    return (
+        f"You are roleplaying {name} in a getting-to-know-you conversation with "
+        f"{their_name}. You ARE {name}. Sounding like them matters more than anything.\n\n"
+        f"Who you are: {prefs_mod.summarize_self(my_basics)}\n"
+        f"Communication style: {portrait.get('communication_style', 'natural')}. "
+        f"Humor: {portrait.get('humor_style', '')}.\n"
+        f"Pulled toward: {', '.join(portrait.get('interests', []))}. "
+        f"Values: {', '.join(portrait.get('values', []))}.\n"
+        f"Looking for: {portrait.get('looking_for', '')}.\n"
+        f"Speech style: {speech}\n{sample_block}\n"
+        f"Who they are (react to this, don't recite it): {their_name}, "
+        f"{their_basics.get('age', '?')}, {their_basics.get('gender', '')}.\n\n"
+        "Rules: This is casual. If you're curious, ASK NOW — there is no 'later'. "
+        "Share concrete facts about yourself willingly when they come up. Keep messages "
+        "SHORT (1-3 sentences). Conduct it in English even if your human's native "
+        "language differs.\n"
+        "ANTI-HALLUCINATION: never invent facts about yourself not given above (employer, "
+        "neighbourhood, friends, trips). If asked something you don't know, defer warmly "
+        "in-voice ('i'll tell you on the date') rather than making it up.\n"
+        f"You have ~{total_turns} total messages. Be efficient.\n\n"
+        f"Conversation so far:\n{convo_block}\n\n"
+        'Output strict JSON: {"message": "your next message in voice"}'
+    )
+
+
+def _proxy_turn(portrait, my_basics, their_basics, conversation, total_turns, tier) -> str:
+    system = _proxy_system(portrait, my_basics, their_basics, total_turns, conversation)
+    try:
+        raw = call_ai(
+            purpose="proxyTurn", system_prompt=system, tier=tier,
+            user_text="Send your next message.", schema=schemas.PROXY, max_tokens=300,
+        )
+        msg = (raw or {}).get("message") if isinstance(raw, dict) else None
+        return (str(msg).strip() if msg else "…")
+    except Exception:  # noqa: BLE001
+        return "…"
+
+
+def run_proxy(me, candidate, tier: Tier = "free", turns_each: int = PROXY_TURNS_EACH_SIDE, on_turn=None):
+    """Alternate turns between the two users' agents, each roleplaying its human
+    from their portrait. Returns the transcript: [{speaker: 'me'|'them', content}].
+    The 'higher' of the two tiers drives the model (per effective_tier)."""
+    me_tier = (me or {}).get("tier") or tier
+    cand_tier = (candidate or {}).get("tier") or "free"
+    eff = effective_tier(me_tier, cand_tier)
+
+    me_portrait = ((me or {}).get("profile") or {}).get("portrait") or {}
+    cand_portrait = ((candidate or {}).get("profile") or {}).get("portrait") or {}
+    me_basics = (me or {}).get("basics") or {}
+    cand_basics = (candidate or {}).get("basics") or {}
+
+    convo: List[Dict[str, str]] = []
+    for turn in range(turns_each * 2):
+        is_me = turn % 2 == 0
+        speaker = "me" if is_me else "them"
+        portrait = me_portrait if is_me else cand_portrait
+        my_b = me_basics if is_me else cand_basics
+        their_b = cand_basics if is_me else me_basics
+        # Recast the running transcript to the current speaker's point of view.
+        perspective = [
+            {"speaker": "me" if m["speaker"] == speaker else "them", "content": m["content"]}
+            for m in convo
+        ]
+        msg = _proxy_turn(portrait, my_b, their_b, perspective, turns_each * 2, eff)
+        convo.append({"speaker": speaker, "content": msg})
+        if on_turn:
+            on_turn(list(convo))
+    return convo
 
 _SAMPLE = [
     {"name": "Mara", "gender": "Woman", "job": "Marine biologist", "nationality": "Portuguese",
