@@ -30,7 +30,7 @@ export default function Page() {
   }, []);
 
   if (authState === 'loading' || !storageReady) {
-    return <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'Fraunces, serif', fontStyle:'italic', color:'#7a6f64' }}>Loading…</div>;
+    return <div className="dara-loading">Loading…</div>;
   }
   if (authState === 'signed-out') {
     return <MagicLinkSignIn />;
