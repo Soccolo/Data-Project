@@ -151,11 +151,28 @@ def _idx(options: list, value, default: int = 0) -> int:
 
 # ─── What Dara learned (portrait) ────────────────────────────────────
 def _insights(prof: dict) -> None:
-    portrait = (prof.get("profile") or {}).get("portrait") or {}
-    if not portrait.get("speech_notes"):
+    # Read the freshest profile from the DB so a just-built portrait shows even
+    # when the cached session profile is stale.
+    portrait = {}
+    try:
+        uid = session.user_id()
+        client = session.get_client() if session.current_user() else None
+        if client and uid:
+            fresh = profile_service.get_profile(client, uid) or {}
+            portrait = (fresh.get("profile") or {}).get("portrait") or {}
+    except Exception:  # noqa: BLE001
+        pass
+    if not portrait:
+        portrait = (prof.get("profile") or {}).get("portrait") or {}
+
+    bf = portrait.get("big_five") or {}
+    has_portrait = bool(portrait.get("speech_notes")) or bool(portrait.get("interests")) \
+        or any(v is not None for v in bf.values())
+    if not has_portrait:
         st.caption(
             "Once you've finished an interview, Dara sketches what it picked up about you "
-            "here — your traits, how you talk, and a few notes."
+            "here — your traits, how you talk, and a few notes. Tap \u201cSee what Dara "
+            "learned\u201d at the end of the interview to build it."
         )
         if st.button("Start an interview →", type="primary"):
             go("interview")
