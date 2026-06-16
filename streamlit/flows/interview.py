@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import streamlit as st
 
-from dara import call_ai, matching
-from .common import current_tier, model_caption
+from dara import call_ai, matching, meets
+from .common import current_tier, model_caption, go
 from . import session
 
 # Number of questions Dara asks before offering to reveal a match.
@@ -102,6 +102,9 @@ def render() -> None:
 
 
 def _render_match(match: dict) -> None:
+    if st.session_state.get("iv_connect_msg"):
+        st.success(st.session_state.pop("iv_connect_msg"))
+
     cand = match.get("candidate") or {}
     cb = cand.get("basics") or {}
     photos = cand.get("_photos") or []
@@ -163,10 +166,37 @@ def _render_match(match: dict) -> None:
 
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("Propose a meet", type="primary", use_container_width=True):
-            st.toast("In the full app this sends a meet proposal.", icon="✨")
+        if st.button("Connect →", type="primary", use_container_width=True):
+            _connect(match)
     with col2:
         if st.button("Start over", use_container_width=True):
             for k in ("iv_messages", "iv_match"):
                 st.session_state.pop(k, None)
             st.rerun()
+
+
+def _connect(match: dict) -> None:
+    cand = match.get("candidate") or {}
+    name = (cand.get("basics") or {}).get("name", "them")
+
+    # Real registered user → a genuine connect request / mutual match.
+    if match.get("source") == "real" and meets.is_real_user_id(cand.get("id")):
+        client, me = _client(), session.current_profile()
+        if not (client and me):
+            st.session_state["iv_connect_msg"] = "Sign in to connect with real users."
+            st.rerun()
+        res = meets.connect(client, me, cand)
+        if res.get("matched"):
+            go("matches")  # already a match → jump straight to the chat list
+        else:
+            st.session_state["iv_connect_msg"] = (
+                f"Connect request sent to {name}. You'll match if they accept."
+            )
+            st.rerun()
+        return
+
+    # Seed / simulated candidate → auto-match + AI persona chat.
+    sm = st.session_state.setdefault("seed_matches", {})
+    cid = cand.get("id") or f"seed_{cand.get('username', 'x')}"
+    sm.setdefault(cid, {"candidate": cand, "messages": []})
+    go("matches")
