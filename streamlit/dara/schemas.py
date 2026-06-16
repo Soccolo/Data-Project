@@ -31,6 +31,19 @@ PRESCREEN: Dict[str, Any] = {
     "required": ["safe", "reason"],
 }
 
+# Distillation of one party's private intake: their side, underlying needs, and
+# a safety judgement (abuse / violence / coercion → not safe to mediate).
+INTAKE: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "summary": {"type": "string"},
+        "needs": {"type": "array", "items": {"type": "string"}},
+        "safe": {"type": "boolean"},
+        "safety_reason": {"type": "string"},
+    },
+    "required": ["summary", "safe"],
+}
+
 MEDIATION: Dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -103,6 +116,21 @@ def normalize_score(d: Any) -> Dict[str, Any]:
         "score": score,
         "verdict": str(d.get("verdict") or "Worth a real conversation."),
         "reasons": [str(r) for r in reasons if str(r).strip()][:5],
+    }
+
+
+def normalize_intake(d: Any) -> Dict[str, Any]:
+    d = d if isinstance(d, dict) else {}
+    needs = d.get("needs") or []
+    if isinstance(needs, str):
+        needs = [needs]
+    if not isinstance(needs, list):
+        needs = []
+    return {
+        "summary": str(d.get("summary") or "").strip(),
+        "needs": [str(n).strip() for n in needs if str(n).strip()][:6],
+        "safe": bool(d.get("safe", True)),
+        "safety_reason": str(d.get("safety_reason") or "").strip(),
     }
 
 
