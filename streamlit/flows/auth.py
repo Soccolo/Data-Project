@@ -28,6 +28,7 @@ def _sign_in() -> None:
     with st.form("sign_in"):
         email = st.text_input("Email", key="si_email")
         password = st.text_input("Password", type="password", key="si_pw")
+        remember = st.checkbox("Remember me on this device", value=True, key="si_remember")
         submitted = st.form_submit_button("Sign in →", use_container_width=True)
     if submitted:
         if not email.strip() or not password:
@@ -35,7 +36,7 @@ def _sign_in() -> None:
             return
         res = auth_service.sign_in(session.get_client(), email, password)
         if res.ok:
-            session.login(res)
+            session.login(res, remember=remember)
             st.rerun()
         else:
             st.error(res.error or "Could not sign in.")
