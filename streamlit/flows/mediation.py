@@ -1,140 +1,316 @@
-"""Mediation flow: prescreen → Dara-to-Dara mediation → per-party takeaways.
+"""Mediation: two real users, a Dara on each side.
 
-A single-session demo of the couples flow. In the full app each party talks to
-their own Dara privately and the two Daras mediate; here we collect both
-perspectives in one place so the whole arc is visible at once.
+The inviter names the invitee (by username) and a topic → the invitee accepts →
+each party privately does intake with their own Dara → when both intakes are in
+(and safe) the two Daras mediate between each other → each party gets a private
+takeaway. State lives in conflict_sessions (RLS-locked to the two parties), so
+it persists across refreshes and devices. No single-device demo: mediation is
+strictly between two registered users.
 """
 
 from __future__ import annotations
 
 import streamlit as st
 
-from dara import call_ai
-from dara import schemas
-from .common import current_tier, model_caption
+from dara import call_ai, conflicts, schemas
+from .common import current_tier, model_caption, rule
+from . import session
 
-_SYSTEM_MEDIATION = (
-    "You are mediating between two partners. Return JSON with `messages`: an "
-    "array of 3 short mediator messages that (1) reflect both sides fairly, "
-    "(2) name the underlying need beneath each position, and (3) suggest one "
-    "small, concrete repair. Be even-handed and warm; no blame."
-)
-_SYSTEM_PRESCREEN = (
-    "Classify whether this relationship conflict is safe and appropriate to "
-    "mediate with an AI. Return JSON: safe (boolean) and reason (one sentence). "
-    "Flag as unsafe anything involving abuse, violence, or coercion."
-)
+_MEDIATION_TURNS_EACH = 3  # 6 Dara-to-Dara messages
 
-_SAMPLE_A = "Plans got changed last minute again and I found out by text. I felt like an afterthought."
-_SAMPLE_B = "I shifted things because work blew up. I thought I was handling it so they wouldn't have to."
+
+# ─── AI engine ───────────────────────────────────────────────────────
+def _intake_reply(my_name: str, topic: str, messages, tier) -> str:
+    system = (
+        f"You are Dara, privately helping {my_name} talk through their side of a "
+        f"conflict about '{topic}' before you mediate with the other person's Dara. "
+        f"This is confidential — only {my_name} ever sees it. Be warm; ask one short "
+        "question at a time; help them name what they felt and what they actually "
+        "need. Two sentences max."
+    )
+    try:
+        return call_ai(purpose="intake", system_prompt=system, tier=tier, history=messages)
+    except Exception:  # noqa: BLE001
+        return "Tell me a little more about what happened, and how it landed for you."
+
+
+def _summarize_intake(my_name: str, topic: str, messages, tier) -> dict:
+    convo = "\n".join(
+        f"{'Dara' if m['role'] == 'assistant' else my_name}: {m['content']}" for m in messages
+    )
+    system = (
+        f"Summarise {my_name}'s side of a conflict about '{topic}' from this private "
+        "intake. Return JSON: summary (1-2 sentences in their own framing), needs "
+        "(their underlying needs), safe (false if ANY sign of abuse, violence, "
+        "coercion, or fear), safety_reason (one sentence if unsafe)."
+    )
+    try:
+        return schemas.normalize_intake(call_ai(
+            purpose="intake", system_prompt=system, tier=tier,
+            user_text=convo, schema=schemas.INTAKE, max_tokens=400,
+        ))
+    except Exception:  # noqa: BLE001
+        return {"summary": "", "needs": [], "safe": True, "safety_reason": ""}
+
+
+def _run_mediation(topic, a_name, a_summary, b_name, b_summary, tier, turns_each=_MEDIATION_TURNS_EACH):
+    convo = []  # [{"speaker": "inviter"|"invitee", "content": str}]
+    sides = {"inviter": (a_name, a_summary, b_name), "invitee": (b_name, b_summary, a_name)}
+    order = ["inviter", "invitee"]
+    for turn in range(turns_each * 2):
+        role = order[turn % 2]
+        my_name, my_sum, their_name = sides[role]
+        lines = "\n".join(
+            f"{a_name if c['speaker'] == 'inviter' else b_name}'s Dara: {c['content']}" for c in convo
+        ) or "[You speak first — open warmly.]"
+        system = (
+            f"You are {my_name}'s Dara, mediating with {their_name}'s Dara about: '{topic}'. "
+            f"You represent {my_name}, whose side is: {my_sum or 'not specified'}. "
+            "Speak FOR your person but constructively — surface their real need without "
+            "blame, acknowledge the other side fairly, and move toward one small concrete "
+            "repair. Calm and warm, 1-2 sentences. Invent nothing beyond the summary. "
+            'Output JSON: {"message": "your next line"}.\n\n'
+            f"Conversation so far:\n{lines}"
+        )
+        try:
+            msg = schemas.normalize_proxy(call_ai(
+                purpose="mediation", system_prompt=system, tier=tier,
+                user_text="Your next line.", schema=schemas.PROXY, max_tokens=200,
+            ))
+        except Exception:  # noqa: BLE001
+            msg = ""
+        convo.append({"speaker": role, "content": msg or "…"})
+    return convo
+
+
+def _takeaway(my_name, other_name, topic, my_summary, their_summary, transcript, tier) -> str:
+    convo = "\n".join(c.get("content", "") for c in transcript)
+    system = (
+        f"Write a short, warm takeaway (2-3 sentences) for {my_name} after Dara mediated "
+        f"their conflict with {other_name} about '{topic}'. Say what the friction was "
+        f"really about underneath, and one concrete thing {my_name} could ask for or do "
+        "next. No blame, no taking sides."
+    )
+    user = f"{my_name}'s side: {my_summary}\n{other_name}'s side: {their_summary}\nMediation:\n{convo}"
+    try:
+        return call_ai(purpose="takeaway", system_prompt=system, tier=tier, user_text=user, max_tokens=300)
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+# ─── UI ──────────────────────────────────────────────────────────────
+def _client():
+    try:
+        return session.get_client() if session.current_user() else None
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def render() -> None:
     st.markdown("##### Mediate a conflict")
     st.title("Let's talk it *through*.")
+    rule()
     model_caption("mediation")
 
-    if st.session_state.get("med_result"):
-        _render_result(st.session_state["med_result"])
+    client, me, uid = _client(), session.current_profile(), session.user_id()
+    if not (client and me and uid):
+        st.info("Mediation happens between two registered users. Sign in to start one or accept an invitation.")
         return
 
-    with st.form("mediation_setup"):
-        c1, c2 = st.columns(2)
-        name_a = c1.text_input("Your name", value="Alex")
-        name_b = c2.text_input("Your partner's name", value="Sam")
-        topic = st.text_input("What's the conflict about?", value="Last-minute changes to plans")
-        persp_a = st.text_area(f"{name_a or 'Your'} side of it", value=_SAMPLE_A, height=90)
-        persp_b = st.text_area(f"{name_b or 'Their'} side of it", value=_SAMPLE_B, height=90)
-        submitted = st.form_submit_button("Run mediation →", use_container_width=True)
-
-    if submitted:
-        with st.spinner("Dara is hearing both sides…"):
-            result = _run(name_a or "Partner A", name_b or "Partner B", topic, persp_a, persp_b)
-        st.session_state["med_result"] = result
-        st.rerun()
-
-
-def _run(name_a: str, name_b: str, topic: str, persp_a: str, persp_b: str) -> dict:
-    tier = current_tier()
-    names = {"a": name_a, "b": name_b}
-    context = (
-        f"Topic: {topic}\n\n{name_a}'s side: {persp_a}\n{name_b}'s side: {persp_b}"
-    )
-    try:
-        # 1) Safety prescreen.
-        prescreen = schemas.normalize_prescreen(call_ai(
-            purpose="prescreen", system_prompt=_SYSTEM_PRESCREEN, tier=tier,
-            user_text=topic, schema=schemas.PRESCREEN, max_tokens=200,
-        ))
-        if not prescreen["safe"]:
-            return {"names": names, "topic": topic, "prescreen": prescreen,
-                    "transcript": [], "takeaway_a": "", "takeaway_b": ""}
-
-        # 2) Dara-to-Dara mediation — one structured call returning a few turns.
-        transcript = schemas.normalize_messages(call_ai(
-            purpose="mediation", system_prompt=_SYSTEM_MEDIATION, tier=tier,
-            user_text=context, schema=schemas.MEDIATION, names=names, max_tokens=900,
-        ))
-
-        # 3) A private takeaway for each party.
-        takeaway_a = call_ai(
-            purpose="takeaway", tier=tier, names={"self": name_a, "other": name_b},
-            user_text=context, max_tokens=400,
-            system_prompt=f"Write a short, warm takeaway (2-3 sentences) for {name_a} about "
-                          f"this conflict with {name_b}: what the friction was really about, "
-                          f"and one concrete thing to ask for.",
-        )
-        takeaway_b = call_ai(
-            purpose="takeaway", tier=tier, names={"self": name_b, "other": name_a},
-            user_text=context, max_tokens=400,
-            system_prompt=f"Write a short, warm takeaway (2-3 sentences) for {name_b} about "
-                          f"this conflict with {name_a}: what the friction was really about, "
-                          f"and one concrete thing to ask for.",
-        )
-    except Exception as e:  # noqa: BLE001
-        return {"names": names, "topic": topic, "error": str(e),
-                "prescreen": {}, "transcript": [], "takeaway_a": "", "takeaway_b": ""}
-
-    return {"names": names, "topic": topic, "prescreen": prescreen,
-            "transcript": transcript, "takeaway_a": takeaway_a, "takeaway_b": takeaway_b}
-
-
-def _render_result(r: dict) -> None:
-    name_a, name_b = r["names"]["a"], r["names"]["b"]
-    st.caption(f"Topic: **{r['topic']}**")
-
-    if r.get("error"):
-        st.error(f"Mediation failed: {r['error']}")
-        if st.button("Try again", use_container_width=True):
-            st.session_state.pop("med_result", None)
-            st.rerun()
-        return
-
-    if r["prescreen"].get("safe", True):
-        st.success("Safety check passed — proceeding to mediation.")
+    sid = st.session_state.get("med_open")
+    if sid:
+        _session_view(client, me, uid, sid)
     else:
-        st.error(f"Safety stop: {r['prescreen'].get('reason', '')}")
-        if st.button("Start over", use_container_width=True):
-            st.session_state.pop("med_result", None)
-            st.rerun()
+        _list_view(client, me, uid)
+
+
+def _list_view(client, me, uid) -> None:
+    with st.container(border=True):
+        st.subheader("Start a mediation")
+        with st.form("med_new"):
+            username = st.text_input("Their username", placeholder="their_username",
+                                     help="The other person needs a Dara account.")
+            topic = st.text_input("What's the conflict about?", placeholder="e.g. last-minute changes to plans")
+            sent = st.form_submit_button("Send invite →", use_container_width=True)
+        if sent:
+            if not username.strip() or not topic.strip():
+                st.error("Add their username and a topic.")
+            else:
+                row, err = conflicts.create_session(client, me, username, topic)
+                if err:
+                    st.error(err)
+                else:
+                    st.session_state["med_open"] = row["id"]
+                    st.rerun()
+
+    sessions = conflicts.list_sessions(client, uid)
+    invites = [s for s in sessions if s["status"] == "invited" and s["invitee_id"] == uid]
+    if invites:
+        st.subheader("Invitations")
+        for s in invites:
+            with st.container(border=True):
+                st.write(f"**{s['inviter_name']}** invited you to mediate: _{s['topic']}_")
+                c1, c2 = st.columns(2)
+                if c1.button("Accept", key=f"ma_{s['id']}", type="primary", use_container_width=True):
+                    conflicts.respond_invite(client, s["id"], True)
+                    st.session_state["med_open"] = s["id"]
+                    st.rerun()
+                if c2.button("Decline", key=f"md_{s['id']}", use_container_width=True):
+                    conflicts.respond_invite(client, s["id"], False)
+                    st.rerun()
+
+    active = [s for s in sessions if s not in invites]
+    st.subheader("Your mediations")
+    if not active:
+        st.caption("Nothing yet. Invite someone above to start one.")
+    for s in active:
+        with st.container(border=True):
+            other = s["invitee_name"] if s["inviter_id"] == uid else s["inviter_name"]
+            st.write(f"**{s['topic']}**  ·  with {other}")
+            st.caption(_status_label(s, uid))
+            if st.button("Open", key=f"mo_{s['id']}", use_container_width=True):
+                st.session_state["med_open"] = s["id"]
+                st.rerun()
+
+
+def _status_label(s, uid) -> str:
+    role = conflicts.role_of(s, uid)
+    status = s["status"]
+    if status == "declined":
+        return "Declined"
+    if status == "safety-stopped":
+        return "Stopped for safety"
+    if status == "invited":
+        return "Waiting for them to accept" if role == "inviter" else "Invitation — needs your response"
+    if status == "complete":
+        return "Complete"
+    if status == "mediating":
+        return "The Daras are mediating…"
+    # intake
+    mine = conflicts.side(s, role).get("complete")
+    return "Waiting for the other person's intake" if mine else "Your intake is open"
+
+
+def _session_view(client, me, uid, sid) -> None:
+    s = conflicts.get_session(client, sid)
+    if st.button("← Mediations"):
+        st.session_state.pop("med_open", None)
+        st.rerun()
+    if not s:
+        st.caption("This mediation isn't available.")
         return
 
-    st.subheader("Mediation")
-    for line in r["transcript"]:
-        with st.chat_message("assistant", avatar="✨"):
-            st.write(line)
+    role = conflicts.role_of(s, uid)
+    other = conflicts.other_role(role)
+    st.caption(f"Topic: **{s['topic']}**  ·  with {conflicts.name_of(s, other)}")
+    status = s["status"]
 
-    st.subheader("Takeaways")
-    c1, c2 = st.columns(2)
-    with c1:
-        with st.container(border=True):
-            st.markdown(f"**For {name_a}**")
-            st.write(r["takeaway_a"])
-    with c2:
-        with st.container(border=True):
-            st.markdown(f"**For {name_b}**")
-            st.write(r["takeaway_b"])
+    if status == "declined":
+        st.info("This invitation was declined.")
+        return
+    if status == "safety-stopped":
+        st.error(f"This mediation was stopped for safety: {s.get('safety_reason', '')}")
+        st.caption("This isn't something to work through with an AI. Please consider reaching "
+                   "out to someone you trust or a professional who can help.")
+        return
+    if status == "invited":
+        if role == "invitee":
+            st.write(f"**{s['inviter_name']}** wants to mediate this with you.")
+            c1, c2 = st.columns(2)
+            if c1.button("Accept", type="primary", use_container_width=True):
+                conflicts.respond_invite(client, sid, True)
+                st.rerun()
+            if c2.button("Decline", use_container_width=True):
+                conflicts.respond_invite(client, sid, False)
+                st.rerun()
+        else:
+            st.info(f"Waiting for {s['invitee_name']} to accept your invitation.")
+        return
 
-    if st.button("Run another", use_container_width=True):
-        st.session_state.pop("med_result", None)
+    if status in ("mediating", "complete"):
+        _render_results(s, role)
+        return
+
+    # status == 'intake'
+    if not conflicts.side(s, role).get("complete"):
+        _intake(client, s, role)
+        return
+
+    if conflicts.both_intakes_complete(s):
+        _run_and_save(client, s)
         st.rerun()
+    else:
+        st.success(f"Your side is in. Waiting for {conflicts.name_of(s, other)} to finish theirs — "
+                   "check back soon.")
+
+
+def _intake(client, s, role) -> None:
+    my_name = conflicts.name_of(s, role)
+    st.write("This part is private — only you and your Dara. When you're ready, Dara shares a "
+             "short summary with the other person's Dara, never your raw words.")
+
+    msgs = conflicts.side(s, role).get("messages") or []
+    if not msgs:
+        opener = _intake_reply(my_name, s["topic"], [], current_tier())
+        s = conflicts.append_intake_message(client, s, role, "assistant", opener)
+        msgs = conflicts.side(s, role).get("messages")
+
+    for m in msgs:
+        is_dara = m["role"] == "assistant"
+        with st.chat_message("assistant" if is_dara else "user", avatar="✨" if is_dara else None):
+            st.write(m["content"])
+
+    user_turns = sum(1 for m in msgs if m["role"] == "user")
+    if user_turns >= 2:
+        if st.button("I've said my piece — share my side →", type="primary", use_container_width=True):
+            with st.spinner("Dara is summarising your side…"):
+                summ = _summarize_intake(my_name, s["topic"], msgs, current_tier())
+            text = summ["summary"]
+            if summ.get("needs"):
+                text += " (Underlying needs: " + ", ".join(summ["needs"]) + ".)"
+            conflicts.complete_intake(client, s, role, text, summ["safe"], summ.get("safety_reason", ""))
+            st.rerun()
+
+    prompt = st.chat_input("Tell Dara…")
+    if prompt:
+        conflicts.append_intake_message(client, s, role, "user", prompt)
+        reply = _intake_reply(my_name, s["topic"], msgs + [{"role": "user", "content": prompt}], current_tier())
+        conflicts.append_intake_message(client, s, role, "assistant", reply)
+        st.rerun()
+
+
+def _run_and_save(client, s) -> None:
+    conflicts.save_mediation(client, s["id"], [])  # flip to 'mediating' so the other side doesn't re-run
+    inv, ine = conflicts.side(s, "inviter"), conflicts.side(s, "invitee")
+    with st.spinner("The two Daras are mediating…"):
+        transcript = _run_mediation(
+            s["topic"], s["inviter_name"], inv.get("summary", ""),
+            s["invitee_name"], ine.get("summary", ""), current_tier(),
+        )
+        conflicts.save_mediation(client, s["id"], transcript)
+        t_inv = _takeaway(s["inviter_name"], s["invitee_name"], s["topic"],
+                          inv.get("summary", ""), ine.get("summary", ""), transcript, current_tier())
+        t_ine = _takeaway(s["invitee_name"], s["inviter_name"], s["topic"],
+                          ine.get("summary", ""), inv.get("summary", ""), transcript, current_tier())
+        conflicts.save_takeaways(client, s["id"], t_inv, t_ine)
+
+
+def _render_results(s, role) -> None:
+    transcript = (s.get("mediation") or {}).get("messages") or []
+    my_take = (s.get("takeaways") or {}).get(role)
+
+    if s["status"] == "mediating" and not my_take:
+        st.info("The two Daras are mediating now — check back in a moment "
+                "(tap ← Mediations and reopen to refresh).")
+        return
+
+    st.subheader("How the Daras talked it through")
+    for c in transcript:
+        speaker = s["inviter_name"] if c.get("speaker") == "inviter" else s["invitee_name"]
+        with st.chat_message("assistant", avatar="✨"):
+            st.markdown(f"**{speaker}'s Dara:** {c.get('content', '')}")
+
+    if my_take:
+        st.subheader("Your takeaway")
+        with st.container(border=True):
+            st.write(my_take)
