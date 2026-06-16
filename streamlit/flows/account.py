@@ -44,7 +44,15 @@ def _profile(prof: dict) -> None:
             index=kinds.index(cur_kind) if cur_kind in kinds else 0,
             format_func=lambda k: _KINDS[k],
         )
-        bio = st.text_area("Bio", value=basics.get("bio", ""), height=100)
+        bio = st.text_area("Description", value=basics.get("bio", ""), height=100)
+        col_job, col_height = st.columns(2)
+        with col_job:
+            job = st.text_input("Job", value=basics.get("job", ""))
+        with col_height:
+            height = st.number_input(
+                "Height (cm)", min_value=120, max_value=230,
+                value=int(basics.get("height_cm") or 170), step=1,
+            )
         submitted = st.form_submit_button("Save changes", use_container_width=True)
 
     if submitted:
@@ -56,7 +64,10 @@ def _profile(prof: dict) -> None:
         ):
             st.error("That username is taken.")
             return
-        new_basics = {**basics, "name": name.strip(), "bio": bio.strip()}
+        new_basics = {
+            **basics, "name": name.strip(), "bio": bio.strip(),
+            "job": job.strip(), "height_cm": int(height),
+        }
         try:
             profile_service.update_profile(
                 client, uid, username=username, kind=kind, basics=new_basics
