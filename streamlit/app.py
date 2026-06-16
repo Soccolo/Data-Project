@@ -12,7 +12,7 @@ import streamlit as st
 
 from dara import profile as profile_service
 from dara.config import settings
-from flows import account, auth, home, interview, mediation, onboarding, session
+from flows import account, auth, home, interview, matches, mediation, onboarding, session
 from flows.common import inject_css, sidebar
 
 st.set_page_config(page_title="Dara", page_icon="✦", layout="centered")
@@ -22,6 +22,7 @@ _VIEWS = {
     "home": home.render,
     "interview": interview.render,
     "mediation": mediation.render,
+    "matches": matches.render,
     "account": account.render,
 }
 
