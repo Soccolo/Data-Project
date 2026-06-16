@@ -59,6 +59,19 @@ PORTRAIT: Dict[str, Any] = {
     "required": ["communication_style", "speech_notes"],
 }
 
+# One turn of a Dara-to-Dara proxy conversation.
+PROXY: Dict[str, Any] = {
+    "type": "object",
+    "properties": {"message": {"type": "string"}},
+    "required": ["message"],
+}
+
+PROXY: Dict[str, Any] = {
+    "type": "object",
+    "properties": {"message": {"type": "string"}},
+    "required": ["message"],
+}
+
 # Photo read. Deliberately about what a photo legitimately shows — overall
 # vibe, setting, presentation — NOT protected attributes (ethnicity,
 # nationality, exact age), which can't be reliably or fairly inferred from a face.
@@ -105,6 +118,12 @@ def normalize_messages(d: Any) -> List[str]:
     if not isinstance(msgs, list):
         msgs = []
     return [str(m) for m in msgs if str(m).strip()][:5]
+
+
+def normalize_proxy(d: Any) -> str:
+    if isinstance(d, dict):
+        return str(d.get("message") or "").strip()
+    return str(d or "").strip()
 
 
 def normalize_portrait(d: Any) -> Dict[str, Any]:
