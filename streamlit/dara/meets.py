@@ -37,9 +37,12 @@ def _set_status(client: Any, meet_id: str, status: str) -> Dict[str, Any]:
     return (res.data or [{}])[0]
 
 
-def connect(client: Any, me: Dict[str, Any], candidate: Dict[str, Any], note: str = "") -> Dict[str, Any]:
+def connect(client: Any, me: Dict[str, Any], candidate: Dict[str, Any], note: str = "",
+            match_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Send a connect request, or instant-match if the candidate already
-    requested you. Returns {"meet": row, "matched": bool}."""
+    requested you. ``match_data`` (the Dara-to-Dara conversation + score that
+    this user's Dara generated) is stored on the meet so the recipient reads the
+    SAME conversation. Returns {"meet": row, "matched": bool}."""
     me_id, cand_id = me["id"], candidate["id"]
     existing = _between(client, me_id, cand_id)
     if existing:
@@ -53,6 +56,8 @@ def connect(client: Any, me: Dict[str, Any], candidate: Dict[str, Any], note: st
         "proposer_name": _name(me), "recipient_name": _name(candidate),
         "message": note or None, "status": "pending",
     }
+    if match_data is not None:
+        row["match_data"] = match_data
     res = client.table("meets").insert(row).execute()
     return {"meet": (res.data or [row])[0], "matched": False}
 
