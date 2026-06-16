@@ -9,6 +9,7 @@ from dara import prefs as prefs_mod
 from dara import profile as profile_service
 from dara.tiers import TIER_INFO, TIER_ORDER
 from . import session
+from .common import go, render_portrait
 
 
 def render() -> None:
@@ -149,55 +150,32 @@ def _idx(options: list, value, default: int = 0) -> int:
 
 
 # ─── What Dara learned (portrait) ────────────────────────────────────
-_OCEAN = [
-    ("openness", "Openness"),
-    ("conscientiousness", "Conscientiousness"),
-    ("extraversion", "Extraversion"),
-    ("agreeableness", "Agreeableness"),
-    ("neuroticism", "Emotional sensitivity"),
-]
-
-
 def _insights(prof: dict) -> None:
     portrait = (prof.get("profile") or {}).get("portrait") or {}
     if not portrait.get("speech_notes"):
         st.caption(
-            "Once you've done an interview and revealed a match, Dara sketches what it "
-            "picked up about you here — your traits, how you talk, and a few notes."
+            "Once you've finished an interview, Dara sketches what it picked up about you "
+            "here — your traits, how you talk, and a few notes."
         )
+        if st.button("Start an interview →", type="primary"):
+            go("interview")
         return
 
     st.caption("Dara's impression from your interview — a read on how you came across, not a clinical test.")
+    render_portrait(portrait)
 
-    bf = portrait.get("big_five") or {}
-    if any(bf.get(k) is not None for k, _ in _OCEAN):
-        st.subheader("Personality (OCEAN)")
-        for key, label in _OCEAN:
-            v = bf.get(key)
-            if v is not None:
-                st.progress(int(v) / 100, text=f"{label} · {int(v)}")
-
-    if portrait.get("speech_notes"):
-        st.subheader("How you talk")
-        st.write(portrait["speech_notes"])
-
-    cols = st.columns(2)
-    if portrait.get("interests"):
-        with cols[0]:
-            st.subheader("Interests")
-            st.write(", ".join(portrait["interests"]))
-    if portrait.get("values"):
-        with cols[1]:
-            st.subheader("Values")
-            st.write(", ".join(portrait["values"]))
-
-    if portrait.get("observations"):
-        st.subheader("Notes")
-        for o in portrait["observations"]:
-            st.write(f"• {o}")
-
-    if portrait.get("vibe"):
-        st.caption(f"Overall vibe: {portrait['vibe']}")
+    st.divider()
+    if st.button("Refresh from a new interview", use_container_width=True):
+        new_profile = {**(prof.get("profile") or {}), "portrait": None}
+        try:
+            profile_service.update_profile(session.get_client(), session.user_id(), profile=new_profile)
+            session.refresh_profile()
+        except Exception as e:  # noqa: BLE001
+            st.error(f"Couldn't reset: {e}")
+            return
+        for k in ("iv_messages", "iv_match", "iv_portrait"):
+            st.session_state.pop(k, None)
+        go("interview")
 
 
 # ─── Photos ──────────────────────────────────────────────────────────
