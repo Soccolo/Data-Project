@@ -135,33 +135,21 @@ def render() -> None:
 
 
 def _reveal_match(msgs: list) -> None:
-    """Run the match and stream the Dara-to-Dara conversation live, message by
-    message, into a placeholder — then show the full match card on rerun."""
-    holder = st.empty()
-
-    def _on_turn(i, total, convo):
-        with holder.container():
-            st.caption(f"Your Daras are talking… {i}/{total}")
-            for m in convo:
-                is_me = m.get("speaker") == "me"
-                with st.chat_message("user" if is_me else "assistant", avatar=None if is_me else "✨"):
-                    st.write(m.get("content", ""))
-
-    st.session_state["iv_match"] = matching.find_match(
-        conversation=msgs,
-        tier=current_tier(),
-        client=_client(),
-        me=session.current_profile(),
-        on_turn=_on_turn,
-    )
-    holder.empty()
+    """Save the user's profile from the interview, then hand off to the Matches
+    page, which runs the tier-based search and shows the people Dara met."""
+    with st.spinner("Saving your profile…"):
+        matching.get_or_build_portrait(
+            session.current_profile() or {"basics": {}}, msgs, current_tier(), _client(),
+        )
     try:
-        session.refresh_profile()  # portrait was built/persisted inside find_match
+        session.refresh_profile()
     except Exception:  # noqa: BLE001
         pass
-    st.session_state.pop("iv_portrait", None)
     _clear_draft()
-    st.rerun()
+    for k in ("iv_messages", "iv_match", "iv_portrait"):
+        st.session_state.pop(k, None)
+    st.session_state["auto_search"] = True
+    go("matches")
 
 
 def _render_match(match: dict) -> None:
