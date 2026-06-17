@@ -71,7 +71,11 @@ def update_profile(
     if basics is not None:
         patch["basics"] = basics
     if profile is not None:
-        patch["profile"] = profile
+        # Merge into the profile JSON already in the DB rather than replacing it,
+        # so a partial write (e.g. saving just the portrait) can never drop other
+        # keys like `onboarded` or `preferences`.
+        existing_profile = (get_profile(client, user_id) or {}).get("profile") or {}
+        patch["profile"] = {**existing_profile, **profile}
     if patch:
         client.table("users").update(patch).eq("id", user_id).execute()
     return get_profile(client, user_id) or {}
