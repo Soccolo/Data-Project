@@ -31,12 +31,16 @@ def render() -> None:
         with st.container(border=True):
             st.subheader("Find a match")
             st.write(
-                "Dara interviews you, learns who you are, then talks to other "
-                "people's Daras to find someone worth a real conversation."
+                "Two ways to do it: let Dara handle everything — it interviews you and "
+                "talks to other people's Daras — or browse profiles yourself and let your "
+                "Dara take over the moment you like someone."
             )
-            if st.button("Start the interview →", key="go_interview",
+            if st.button("Let Dara find someone →", key="go_interview",
                          type="primary", use_container_width=True):
                 go("interview")
+            if st.button("Browse profiles myself →", key="go_browse",
+                         use_container_width=True):
+                go("browse")
 
     with right:
         with st.container(border=True):
