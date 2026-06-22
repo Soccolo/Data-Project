@@ -23,6 +23,7 @@ Purpose = Literal[
     "intake",               # private conflict intake with own Dara
     "mediation",            # Dara-to-Dara conflict mediation (HIGH VOLUME)
     "takeaway",             # synthesised takeaways for each partner
+    "chatAssist",           # in-chat Dara help: openers, replies, date ideas
 ]
 
 Provider = Literal["google", "anthropic", "deepseek"]
@@ -59,6 +60,7 @@ _ROUTES: Dict[Tier, Dict[Purpose, ModelChoice]] = {
         "intake":              ModelChoice("google",    "gemini-2.5-flash",          "Gemini Flash"),
         "mediation":           ModelChoice("google",    "gemini-2.5-flash",          "Gemini Flash"),
         "takeaway":            ModelChoice("google",    "gemini-2.5-flash",          "Gemini Flash"),
+        "chatAssist":           ModelChoice("google",    "gemini-2.5-flash",          "Gemini Flash"),
     },
     "pro": {
         "interview":           ModelChoice("anthropic", "claude-sonnet-4-6",         "Claude Sonnet"),
@@ -71,6 +73,7 @@ _ROUTES: Dict[Tier, Dict[Purpose, ModelChoice]] = {
         "intake":              ModelChoice("anthropic", "claude-sonnet-4-6",         "Claude Sonnet"),
         "mediation":           ModelChoice("google",    "gemini-2.5-flash",          "Gemini Flash"),
         "takeaway":            ModelChoice("anthropic", "claude-sonnet-4-6",         "Claude Sonnet"),
+        "chatAssist":           ModelChoice("anthropic", "claude-sonnet-4-6",         "Claude Sonnet"),
     },
     "x": {
         "interview":           ModelChoice("anthropic", "claude-sonnet-4-6",         "Claude Sonnet"),
@@ -83,6 +86,7 @@ _ROUTES: Dict[Tier, Dict[Purpose, ModelChoice]] = {
         "intake":              ModelChoice("anthropic", "claude-sonnet-4-6",         "Claude Sonnet"),
         "mediation":           ModelChoice("anthropic", "claude-sonnet-4-6",         "Claude Sonnet"),
         "takeaway":            ModelChoice("anthropic", "claude-sonnet-4-6",         "Claude Sonnet"),
+        "chatAssist":           ModelChoice("anthropic", "claude-sonnet-4-6",         "Claude Sonnet"),
     },
 }
 
