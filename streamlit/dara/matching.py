@@ -296,7 +296,7 @@ def browse_candidates(client: Any, me: Dict[str, Any], limit: int = 12) -> List[
                 seen.add(r.get("id"))
         except Exception:  # noqa: BLE001
             pass
-    for s in _pick_seeds(prefs, max(0, limit - len(out)), seen):
+    for s in _pick_seeds((me.get("basics") or {}).get("gender"), prefs, max(0, limit - len(out)), seen):
         s = dict(s)
         s["_source"] = "seed"
         out.append(s)
@@ -400,7 +400,7 @@ def _gather_candidates(client, me, prefs, n, exclude, tier: Tier = "free"):
         except Exception:  # noqa: BLE001
             pass
     if len(out) < n:
-        for s in _pick_seeds(prefs, n - len(out), seen):
+        for s in _pick_seeds((me.get("basics") or {}).get("gender"), prefs, n - len(out), seen):
             out.append((s, "seed"))
             seen.add(s.get("id"))
     if not out:
@@ -424,20 +424,17 @@ def _find_candidates(client: Any, me: Dict[str, Any], prefs: Dict[str, Any],
         pass
     skip = set(exclude) | passed | _connected_ids(client, me_id)
 
-    ranked: List[tuple] = []
+    ranked: List[Dict[str, Any]] = []
     for r in rows:
         if r.get("id") in skip:
             continue
-        if not _matches_prefs(r.get("basics") or {}, prefs):
+        if not _compatible(my_gender, r, prefs):
             continue
-        their_want = prefs_mod.wanted_genders((r.get("profile") or {}).get("preferences") or {})
-        mutual = (not my_gender) or (my_gender in their_want)
-        ranked.append((0 if mutual else 1, r))
+        ranked.append(r)
 
-    _rng.shuffle(ranked)               # variety within a rank…
-    ranked.sort(key=lambda t: t[0])    # …but mutual-interest first
+    _rng.shuffle(ranked)
     out: List[Dict[str, Any]] = []
-    for _, r in ranked[:limit]:
+    for r in ranked[:limit]:
         r = dict(r)
         try:
             r["_photos"] = profile_service.list_photos(client, r["id"])
@@ -447,9 +444,9 @@ def _find_candidates(client: Any, me: Dict[str, Any], prefs: Dict[str, Any],
     return out
 
 
-def _pick_seeds(prefs: Dict[str, Any], k: int, exclude: set) -> List[Dict[str, Any]]:
+def _pick_seeds(my_gender: Optional[str], prefs: Dict[str, Any], k: int, exclude: set) -> List[Dict[str, Any]]:
     pool = [c for c in seed_mod.seed_candidates()
-            if _matches_prefs(c.get("basics") or {}, prefs) and c.get("id") not in exclude]
+            if _compatible(my_gender, c, prefs) and c.get("id") not in exclude]
     _rng.shuffle(pool)
     return pool[:max(0, k)]
 
@@ -462,7 +459,7 @@ def _choose_candidate(client, me, prefs):
                 return real, "real"
         except Exception:  # noqa: BLE001
             pass
-    seeded = _pick_seed(prefs)
+    seeded = _pick_seed((me.get("basics") or {}).get("gender"), prefs)
     if seeded:
         return seeded, "seed"
     return _simulated_candidate(prefs), "simulated"
@@ -477,6 +474,18 @@ def _matches_prefs(basics: Dict[str, Any], prefs: Dict[str, Any]) -> bool:
         return False
     h = basics.get("height_cm")
     if h and not (prefs["height_min_cm"] <= _int(h) <= prefs["height_max_cm"]):
+        return False
+    return True
+
+
+def _compatible(my_gender: Optional[str], cand: Dict[str, Any], prefs: Dict[str, Any]) -> bool:
+    """Strict, MUTUAL match: the candidate fits the user's preferences AND would
+    want the user back by gender + orientation. A straight man never sees a
+    lesbian woman, a gay man never sees a straight woman, and so on."""
+    if not _matches_prefs(cand.get("basics") or {}, prefs):
+        return False
+    their_want = prefs_mod.wanted_genders((cand.get("profile") or {}).get("preferences") or {})
+    if my_gender and their_want and my_gender not in their_want:
         return False
     return True
 
@@ -500,20 +509,17 @@ def _find_candidate(client: Any, me: Dict[str, Any], prefs: Dict[str, Any]) -> O
     # second, separate Dara-to-Dara conversation never gets generated for a pair.
     connected = _connected_ids(client, me_id)
 
-    ranked: List[tuple] = []
+    ranked: List[Dict[str, Any]] = []
     for r in rows:
         if r.get("id") in passed or r.get("id") in connected:
             continue
-        if not _matches_prefs(r.get("basics") or {}, prefs):
+        if not _compatible(my_gender, r, prefs):
             continue
-        their_want = prefs_mod.wanted_genders((r.get("profile") or {}).get("preferences") or {})
-        mutual = (not my_gender) or (my_gender in their_want)
-        ranked.append((0 if mutual else 1, r))
+        ranked.append(r)
 
     if not ranked:
         return None
-    best = min(t[0] for t in ranked)
-    chosen = dict(_rng.choice([r for rank, r in ranked if rank == best]))
+    chosen = dict(_rng.choice(ranked))
     try:
         chosen["_photos"] = profile_service.list_photos(client, chosen["id"])
     except Exception:  # noqa: BLE001
@@ -536,8 +542,8 @@ def _connected_ids(client: Any, uid: str) -> set:
     return ids
 
 
-def _pick_seed(prefs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    pool = [c for c in seed_mod.seed_candidates() if _matches_prefs(c.get("basics") or {}, prefs)]
+def _pick_seed(my_gender: Optional[str], prefs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    pool = [c for c in seed_mod.seed_candidates() if _compatible(my_gender, c, prefs)]
     return _rng.choice(pool) if pool else None
 
 
