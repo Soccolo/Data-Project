@@ -249,6 +249,75 @@ def find_match(*, conversation: Optional[List[Dict[str, str]]] = None, tier: Tie
     return result
 
 
+def run_match(me: Dict[str, Any], candidate: Dict[str, Any], source: str = "real",
+              conversation: Optional[List[Dict[str, str]]] = None, tier: Tier = "free",
+              client: Any = None, on_turn=None) -> Dict[str, Any]:
+    """Run the proxy + score pipeline for a candidate the user CHOSE (swipe mode).
+    Same result shape as find_match. Uses the user's cached portrait if present,
+    else builds from the interview, else a minimal one from their basics."""
+    me = dict(me or {})
+    prefs = {**prefs_mod.default_preferences(), **((me.get("profile") or {}).get("preferences") or {})}
+
+    cached = (me.get("profile") or {}).get("portrait")
+    if cached and cached.get("speech_notes"):
+        me_portrait = schemas.normalize_portrait(cached)
+    elif conversation:
+        me_portrait = get_or_build_portrait(me, conversation, tier, client)
+    else:
+        me_portrait = _ensure_portrait(me)
+    me["profile"] = {**(me.get("profile") or {}), "portrait": me_portrait}
+    me_name = (me.get("basics") or {}).get("name", "You")
+
+    candidate = dict(candidate)
+    candidate["profile"] = {**(candidate.get("profile") or {}), "portrait": _ensure_portrait(candidate)}
+    transcript = run_proxy(me, candidate, tier=tier, turns_each=PROXY_TURNS_EACH_SIDE, on_turn=on_turn)
+    photo_fit = _analyze_photos(client, candidate, prefs, tier)
+    result = _score(transcript, me, prefs, candidate, photo_fit, tier)
+    result.update({
+        "candidate": candidate, "photo_fit": photo_fit, "transcript": transcript,
+        "source": source, "simulated": source != "real", "me_name": me_name,
+    })
+    return result
+
+
+def browse_candidates(client: Any, me: Dict[str, Any], limit: int = 12) -> List[Dict[str, Any]]:
+    """A deck of real users (then seed personas) to swipe through — matching the
+    user's preferences, excluding anyone passed or already connected. Each carries
+    a ``_source`` of 'real' or 'seed'. No simulated fallback (nothing to browse)."""
+    prefs = {**prefs_mod.default_preferences(), **((me.get("profile") or {}).get("preferences") or {})}
+    out: List[Dict[str, Any]] = []
+    seen: set = set()
+    if client is not None and me.get("id"):
+        try:
+            for r in _find_candidates(client, me, prefs, limit, seen):
+                r = dict(r)
+                r["_source"] = "real"
+                out.append(r)
+                seen.add(r.get("id"))
+        except Exception:  # noqa: BLE001
+            pass
+    for s in _pick_seeds(prefs, max(0, limit - len(out)), seen):
+        s = dict(s)
+        s["_source"] = "seed"
+        out.append(s)
+    _rng.shuffle(out)
+    return out[:limit]
+
+
+def record_pass(client: Any, uid: str, candidate_id: Optional[str]) -> None:
+    """Remember a 'pass' so the person doesn't resurface. Seeds aren't persisted."""
+    if not (client and uid and candidate_id) or str(candidate_id).startswith("seed_"):
+        return
+    try:
+        res = client.table("user_state").select("passed_ids").eq("user_id", uid).limit(1).execute()
+        passed = set((res.data[0].get("passed_ids") if res.data else None) or [])
+        passed.add(candidate_id)
+        client.table("user_state").upsert({"user_id": uid, "passed_ids": list(passed)},
+                                          on_conflict="user_id").execute()
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def find_matches(*, conversation: Optional[List[Dict[str, str]]] = None, tier: Tier = "free",
                  client: Any = None, me: Optional[Dict[str, Any]] = None, n: int = 1,
                  exclude_ids=None, on_progress=None) -> List[Dict[str, Any]]:
