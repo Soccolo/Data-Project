@@ -10,6 +10,7 @@ from __future__ import annotations
 import streamlit as st
 
 from dara import matching, meets
+from dara import assistant
 from dara import conflicts
 from dara import profile as profile_service
 from dara import tiers
@@ -374,12 +375,18 @@ def _seed_chat(c: dict) -> None:
         with st.chat_message("user" if is_me else "assistant", avatar=None if is_me else "✨"):
             st.write(m["body"])
 
-    prompt = st.chat_input(f"Message {c['name']}…")
-    if prompt:
-        msgs.append({"sender": "me", "body": prompt})
+    def _send_seed(text: str) -> None:
+        msgs.append({"sender": "me", "body": text})
         with st.spinner(f"{c['name']} is typing…"):
             reply = matching.persona_reply(sm["candidate"], _my_basics(), msgs, current_tier())
         msgs.append({"sender": "them", "body": reply})
+
+    hist = [{"from": "me" if m["sender"] == "me" else "them", "text": m["body"]} for m in msgs]
+    _dara_assist(c["id"], session.current_profile() or {}, sm["candidate"], hist, _send_seed)
+
+    prompt = st.chat_input(f"Message {c['name']}…")
+    if prompt:
+        _send_seed(prompt)
         st.rerun()
 
 
@@ -392,8 +399,56 @@ def _real_chat(c: dict) -> None:
         with st.chat_message("user" if m.get("sender_id") == uid else "assistant"):
             st.write(m.get("body", ""))
 
+    msgs = meets.list_messages(client, c["id"])
+    other = {}
+    try:
+        if c.get("other_id"):
+            other = profile_service.get_profile(client, c["other_id"]) or {}
+    except Exception:  # noqa: BLE001
+        other = {}
+    hist = [{"from": "me" if m.get("sender_id") == uid else "them", "text": m.get("body", "")}
+            for m in msgs]
+
+    def _send_real(text: str) -> None:
+        meets.send_message(client, c["id"], uid, text)
+
+    _dara_assist(c["id"], session.current_profile() or {}, other, hist, _send_real)
+
     prompt = st.chat_input(f"Message {c['name']}…")
     if prompt:
         meets.send_message(client, c["id"], uid, prompt)
         st.rerun()
     st.caption("They'll see this and reply when they're next online. Tap ← Matches and back to refresh.")
+
+
+def _dara_assist(chat_key: str, me: dict, other: dict, history: list, on_send) -> None:
+    """Inline Dara helper — generate opener/reply/date suggestions and send one
+    with a tap. ``on_send(text)`` performs the actual send for this chat type."""
+    skey = f"da_sugg_{chat_key}"
+    with st.expander("✨ Ask Dara for help", expanded=bool(st.session_state.get(skey))):
+        has_hist = bool(history)
+        col1, col2 = st.columns(2)
+        gen = None
+        with col1:
+            if st.button("Break the ice" if not has_hist else "Help me reply",
+                         key=f"da_reply_{chat_key}", use_container_width=True):
+                gen = "opener" if not has_hist else "reply"
+        with col2:
+            if st.button("Suggest a date", key=f"da_date_{chat_key}", use_container_width=True):
+                gen = "date"
+        if gen:
+            with st.spinner("Dara's thinking…"):
+                st.session_state[skey] = assistant.suggest(
+                    gen, me, other, history, current_tier(), _client())
+        sugg = st.session_state.get(skey) or []
+        if gen is not None and not sugg:
+            st.caption("Dara couldn't draft anything just now — give it another try.")
+        for i, s in enumerate(sugg):
+            st.divider()
+            if s.get("label"):
+                st.caption(s["label"])
+            st.write(s["text"])
+            if st.button("Send this", key=f"da_send_{chat_key}_{i}", use_container_width=True):
+                on_send(s["text"])
+                st.session_state.pop(skey, None)
+                st.rerun()
