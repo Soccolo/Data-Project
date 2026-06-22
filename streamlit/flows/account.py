@@ -142,6 +142,10 @@ def _prompts_editor(prof: dict) -> None:
                 st.success("Prompts saved.")
             except Exception as e:  # noqa: BLE001
                 st.error(f"Couldn't save prompts: {e}")
+
+
+# ─── Preferences ─────────────────────────────────────────────────────
+def _preferences(prof: dict) -> None:
     p = {**prefs_mod.default_preferences(), **((prof.get("profile") or {}).get("preferences") or {})}
     with st.form("edit_prefs"):
         interested_in = st.multiselect(
