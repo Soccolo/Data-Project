@@ -103,9 +103,45 @@ def _profile(prof: dict) -> None:
         session.refresh_profile()
         st.success("Saved.")
 
+    _prompts_editor(prof)
 
-# ─── Preferences ─────────────────────────────────────────────────────
-def _preferences(prof: dict) -> None:
+
+# ─── Profile prompts (Hinge-style) ───────────────────────────────────
+def _prompts_editor(prof: dict) -> None:
+    st.divider()
+    st.subheader("Profile prompts")
+    st.caption("Answer a few so people browsing can get a feel for you. Leave the prompt on "
+               "“—” to skip a slot.")
+
+    existing = {p.get("prompt"): p.get("answer", "")
+                for p in ((prof.get("profile") or {}).get("prompts") or [])}
+    options = ["—"] + prefs_mod.PROMPTS
+    prior = [p.get("prompt") for p in ((prof.get("profile") or {}).get("prompts") or [])]
+
+    with st.form("edit_prompts"):
+        chosen = []
+        for i in range(3):
+            cur = prior[i] if i < len(prior) else "—"
+            prompt = st.selectbox(
+                f"Prompt {i + 1}", options,
+                index=options.index(cur) if cur in options else 0, key=f"prompt_sel_{i}",
+            )
+            answer = st.text_input(
+                "Your answer", value=existing.get(prompt, ""), key=f"prompt_ans_{i}",
+                label_visibility="collapsed", placeholder="Your answer…",
+            )
+            if prompt != "—" and answer.strip():
+                chosen.append({"prompt": prompt, "answer": answer.strip()})
+        if st.form_submit_button("Save prompts", use_container_width=True):
+            try:
+                profile_service.update_profile(
+                    session.get_client(), session.user_id(),
+                    profile={"prompts": chosen},
+                )
+                session.refresh_profile()
+                st.success("Prompts saved.")
+            except Exception as e:  # noqa: BLE001
+                st.error(f"Couldn't save prompts: {e}")
     p = {**prefs_mod.default_preferences(), **((prof.get("profile") or {}).get("preferences") or {})}
     with st.form("edit_prefs"):
         interested_in = st.multiselect(
