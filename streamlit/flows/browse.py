@@ -56,15 +56,25 @@ def render() -> None:
     st.caption(f"{idx + 1} of {len(pool)}")
     _card(cand)
 
-    c1, c2 = st.columns(2)
-    with c1:
-        if st.button("✕  Pass", use_container_width=True):
-            matching.record_pass(client, uid, cand.get("id"))
-            st.session_state["browse_idx"] = idx + 1
-            st.rerun()
-    with c2:
+    is_x = current_tier() == "x"
+    if st.button("✕  Pass", use_container_width=True):
+        matching.record_pass(client, uid, cand.get("id"))
+        st.session_state["browse_idx"] = idx + 1
+        st.rerun()
+
+    if is_x:
+        # Top tier: connect straight away (no AI), or still let Dara vet them first.
+        d1, d2 = st.columns(2)
+        with d1:
+            if st.button("♥  Connect directly", type="primary", use_container_width=True):
+                _direct_connect(me, cand)
+        with d2:
+            if st.button("Let Dara talk first", use_container_width=True):
+                _like(me, cand)
+    else:
         if st.button("♥  Like — let Dara talk", type="primary", use_container_width=True):
             _like(me, cand)
+        st.caption("Connecting without the AI conversation is part of the X plan.")
 
 
 def _card(cand: dict) -> None:
@@ -81,6 +91,30 @@ def _card(cand: dict) -> None:
             st.caption("  ·  ".join(bits))
         if basics.get("bio"):
             st.write(basics["bio"])
+        for pr in (cand.get("profile") or {}).get("prompts") or []:
+            if pr.get("answer"):
+                st.markdown(f"**{pr.get('prompt', '')}**")
+                st.write(pr["answer"])
+
+
+def _direct_connect(me: dict, cand: dict) -> None:
+    """X-plan: connect with no AI conversation — Hinge-style. The recipient sees a
+    plain connect request (no transcript) and can accept to match."""
+    name = (cand.get("basics") or {}).get("name", "them")
+    st.session_state["browse_idx"] = st.session_state.get("browse_idx", 0) + 1
+    if cand.get("_source") == "real" and meets.is_real_user_id(cand.get("id")):
+        res = meets.connect(_client(), me, cand)  # no match_data → no transcript
+        if res.get("matched"):
+            go("matches")
+        else:
+            st.toast(f"Connect request sent to {name}.")
+            st.rerun()
+        return
+    # seed / test persona → auto-match
+    sm = st.session_state.setdefault("seed_matches", {})
+    cid = cand.get("id") or f"seed_{cand.get('username', 'x')}"
+    sm.setdefault(cid, {"candidate": cand, "messages": []})
+    go("matches")
 
 
 def _like(me: dict, cand: dict) -> None:
