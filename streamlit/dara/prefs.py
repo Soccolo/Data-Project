@@ -23,6 +23,22 @@ INTENTS = [
     "New friends", "Still figuring it out",
 ]
 
+# Hinge-style profile prompts people can answer, shown when browsing profiles.
+PROMPTS = [
+    "A fact about me that surprises people",
+    "My ideal Sunday",
+    "I'm looking for someone who",
+    "The way to my heart is",
+    "I get way too excited about",
+    "A cause I care about",
+    "My most controversial (harmless) opinion",
+    "Together, we could",
+    "The best way to ask me out",
+    "I'll know it's going well when",
+    "My simple pleasures",
+    "Two truths and a lie",
+]
+
 # Map an "interested in" selection to the gender values it should match.
 _INTEREST_TO_GENDER = {
     "Women": {"Woman"},
