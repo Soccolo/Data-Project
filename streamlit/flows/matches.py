@@ -1,8 +1,7 @@
 """Matches: accept incoming connect requests, see your matches, and chat.
 
-Real matches go through Supabase (meets + messages); the other person is a real
-human who replies when they're online. Seed/test candidates have no human, so
-they auto-match and reply in-voice via AI, kept in session state.
+Vibrant redesign: person rows render with theme_components.match_list_card;
+chat (st.chat_message), the Dara assist panel and all buttons stay native.
 """
 
 from __future__ import annotations
@@ -15,6 +14,7 @@ from dara import conflicts
 from dara import profile as profile_service
 from dara import tiers
 from . import session
+from . import theme_components as tc
 from .common import current_tier, go, rule
 
 _PER_SEARCH = 3  # matches generated per "Search" click (caps per-click cost)
@@ -98,21 +98,11 @@ def _list() -> None:
         return
     for c in cards:
         basics, photo_url = _person_brief(client, c)
-        with st.container(border=True):
-            left, right = st.columns([1, 4])
-            with left:
-                if photo_url:
-                    st.image(photo_url, use_container_width=True)
-                else:
-                    st.markdown("## ✨")
-            with right:
-                st.markdown(f"**{c['name']}**" + ("  ·  _test persona_" if c["kind"] == "seed" else ""))
-                bits = _detail_bits(basics)
-                if bits:
-                    st.caption(bits)
-            if st.button("Open chat", key=f"open_{c['kind']}_{c['id']}", use_container_width=True):
-                st.session_state["match_open"] = c
-                st.rerun()
+        name = c["name"] + ("  ·  test persona" if c["kind"] == "seed" else "")
+        tc.match_list_card(name, _detail_bits(basics), score=None, photo_url=photo_url)
+        if st.button("Open chat", key=f"open_{c['kind']}_{c['id']}", use_container_width=True):
+            st.session_state["match_open"] = c
+            st.rerun()
 
     # Mediations live here too, so everything you're in flight on is in one place.
     if client and uid:
@@ -290,37 +280,24 @@ def _suggestions_section(client, me, uid) -> None:
                     photo_url = photos[0].get("signed_url")
             except Exception:  # noqa: BLE001
                 pass
-        with st.container(border=True):
-            left, right = st.columns([1, 4])
-            with left:
-                if photo_url:
-                    st.image(photo_url, use_container_width=True)
-                else:
-                    st.markdown("## ✨")
-            with right:
-                tag = "  ·  _test persona_" if c.get("is_seed") else ""
-                st.markdown(f"**{basics.get('name', 'Someone')}**{tag}")
-                bits = _detail_bits(basics)
-                if bits:
-                    st.caption(bits)
-                if sug.get("score") is not None:
-                    st.caption(f"Compatibility {sug['score']}%")
-            if sug.get("verdict"):
-                st.write(sug["verdict"])
-            transcript = sug.get("transcript") or []
-            if transcript:
-                me_name, their = sug.get("me_name", "You"), basics.get("name", "Them")
-                with st.expander(f"Read how your Daras talked · {len(transcript)} messages"):
-                    for m in transcript:
-                        who = me_name if m.get("speaker") == "me" else their
-                        st.markdown(f"**{who}:** {m.get('content', '')}")
-            b1, b2 = st.columns(2)
-            if b1.button("Connect →", key=f"sugc_{idx}", type="primary", use_container_width=True):
-                _connect_suggestion(client, me, uid, suggestions, idx)
-            if b2.button("Pass", key=f"sugp_{idx}", use_container_width=True):
-                suggestions.pop(idx)
-                profile_service.save_suggestions(client, uid, suggestions)
-                st.rerun()
+        name = basics.get("name", "Someone") + ("  ·  test persona" if c.get("is_seed") else "")
+        tc.match_list_card(name, _detail_bits(basics), score=sug.get("score"), photo_url=photo_url)
+        if sug.get("verdict"):
+            st.write(sug["verdict"])
+        transcript = sug.get("transcript") or []
+        if transcript:
+            me_name, their = sug.get("me_name", "You"), basics.get("name", "Them")
+            with st.expander(f"Read how your Daras talked · {len(transcript)} messages"):
+                for m in transcript:
+                    who = me_name if m.get("speaker") == "me" else their
+                    st.markdown(f"**{who}:** {m.get('content', '')}")
+        b1, b2 = st.columns(2)
+        if b1.button("Connect →", key=f"sugc_{idx}", type="primary", use_container_width=True):
+            _connect_suggestion(client, me, uid, suggestions, idx)
+        if b2.button("Pass", key=f"sugp_{idx}", use_container_width=True):
+            suggestions.pop(idx)
+            profile_service.save_suggestions(client, uid, suggestions)
+            st.rerun()
 
 
 def _connect_suggestion(client, me, uid, suggestions, idx) -> None:

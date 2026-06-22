@@ -1,4 +1,5 @@
-"""Landing page — greet the user and pick a flow."""
+"""Landing page — greet the user and pick a flow. Vibrant redesign:
+custom HTML hero + flow cards (theme_components), native buttons beneath."""
 
 from __future__ import annotations
 
@@ -6,52 +7,50 @@ import streamlit as st
 
 from dara.config import settings
 from . import session
-from .common import WORDMARK, go, rule
+from . import theme_components as tc
+from .common import go
 
 
 def render() -> None:
     prof = session.current_profile()
     name = ((prof or {}).get("basics") or {}).get("name") if prof else None
 
-    st.markdown(f"##### {WORDMARK}")
-    if name:
-        st.title(f"Hi {name}, meet *Dara*.")
-    else:
-        st.title("Meet *Dara*.")
-    rule()
-    st.write(
+    title = (
+        f'Hi {tc._esc(name)},<br>meet {tc.grad_word("Dara")}.'
+        if name else f'Meet {tc.grad_word("Dara")}.'
+    )
+    tc.hero(
+        title,
         "An AI that acts on your behalf — to find someone worth meeting, or to "
-        "talk through a conflict with someone you already know. Pick a starting point."
+        "talk through a conflict with someone you already know. Pick a starting point.",
     )
 
-    st.write("")
     left, right = st.columns(2)
 
     with left:
-        with st.container(border=True):
-            st.subheader("Find a match")
-            st.write(
-                "Two ways to do it: let Dara handle everything — it interviews you and "
-                "talks to other people's Daras — or browse profiles yourself and let your "
-                "Dara take over the moment you like someone."
-            )
-            if st.button("Let Dara find someone →", key="go_interview",
-                         type="primary", use_container_width=True):
-                go("interview")
-            if st.button("Browse profiles myself →", key="go_browse",
-                         use_container_width=True):
-                go("browse")
+        tc.flow_card(
+            "Find a match",
+            "Let Dara handle everything — it interviews you and talks to other "
+            "people's Daras — or browse profiles yourself.",
+            accent=tc.ROSE, filled=True,
+        )
+        if st.button("Let Dara find someone →", key="go_interview",
+                     type="primary", use_container_width=True):
+            go("interview")
+        if st.button("Browse profiles myself →", key="go_browse",
+                     use_container_width=True):
+            go("browse")
 
     with right:
-        with st.container(border=True):
-            st.subheader("Mediate a conflict")
-            st.write(
-                "Bring a disagreement. Dara hears each side privately, then mediates "
-                "between both Daras and hands each person a takeaway."
-            )
-            if st.button("Start mediation →", key="go_mediation",
-                         type="primary", use_container_width=True):
-                go("mediation")
+        tc.flow_card(
+            "Mediate a conflict",
+            "Bring a disagreement. Dara hears each side privately, then mediates "
+            "between both Daras and hands each person a takeaway.",
+            accent=tc.IRIS, filled=False,
+        )
+        if st.button("Start mediation →", key="go_mediation",
+                     type="primary", use_container_width=True):
+            go("mediation")
 
     st.write("")
     if settings.ai_mode == "mock":

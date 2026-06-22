@@ -1,4 +1,9 @@
-"""Matchmaking flow: Dara interviews the user, then reveals a scored match."""
+"""Matchmaking flow: Dara interviews the user, then reveals a scored match.
+
+Vibrant redesign: the match reveal is rendered with theme_components
+(photo header + compatibility ring + reasons); chat, buttons and the
+transcript expander stay native (and are themed by common._BRAND_CSS).
+"""
 
 from __future__ import annotations
 
@@ -8,6 +13,7 @@ from dara import call_ai, matching, meets
 from dara import profile as profile_service
 from .common import current_tier, model_caption, go, render_portrait
 from . import session
+from . import theme_components as tc
 
 # Number of questions Dara asks before offering to reveal a match.
 _MAX_TURNS = 5
@@ -161,38 +167,32 @@ def _render_match(match: dict) -> None:
     photos = cand.get("_photos") or []
     fit = match.get("photo_fit") or {}
 
-    with st.container(border=True):
-        st.subheader(f"Your match: {cb.get('name', 'Someone')}")
-        if photos and photos[0].get("signed_url"):
-            st.image(photos[0]["signed_url"], use_container_width=True)
+    meta = []
+    if cb.get("age"):
+        meta.append(str(cb["age"]))
+    if cb.get("job"):
+        meta.append(cb["job"])
+    if cb.get("nationality"):
+        meta.append(cb["nationality"])
+    if cb.get("height_cm"):
+        meta.append(f"{cb['height_cm']}cm")
+    photo_url = photos[0]["signed_url"] if (photos and photos[0].get("signed_url")) else None
 
-        meta = []
-        if cb.get("age"):
-            meta.append(str(cb["age"]))
-        if cb.get("job"):
-            meta.append(cb["job"])
-        if cb.get("nationality"):
-            meta.append(cb["nationality"])
-        if cb.get("height_cm"):
-            meta.append(f"{cb['height_cm']}cm")
-        if meta:
-            st.caption(" · ".join(meta))
-        if cb.get("bio"):
-            st.write(cb["bio"])
-
-        st.metric("Compatibility", f"{match.get('score', 0)}%",
-                  help="Dara's verdict after the Dara-to-Dara conversation, your preferences, and the photo read.")
-        if match.get("verdict"):
-            st.write(f"**{match['verdict']}**")
-        for r in match.get("reasons", []):
-            st.write(f"• {r}")
-
-        if fit.get("impression"):
-            st.divider()
-            st.caption("Dara's read of their photos")
-            st.write(fit["impression"])
-            if fit.get("vibe_tags"):
-                st.caption(" · ".join(fit["vibe_tags"]))
+    # The bespoke reveal card: photo header, compatibility ring, reasons.
+    tc.match_reveal(
+        name=cb.get("name", "Someone"),
+        meta=" · ".join(meta),
+        score=match.get("score", 0),
+        verdict=match.get("verdict", ""),
+        reasons=match.get("reasons", []),
+        photo_url=photo_url,
+    )
+    if cb.get("bio"):
+        st.write(cb["bio"])
+    if fit.get("impression"):
+        tc.info_note("<strong>Dara's read of their photos.</strong> " + tc._esc(fit["impression"]), accent=tc.IRIS)
+        if fit.get("vibe_tags"):
+            st.caption(" · ".join(fit["vibe_tags"]))
 
     transcript = match.get("transcript") or []
     if transcript:

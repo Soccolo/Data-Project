@@ -1,11 +1,7 @@
 """Mediation: two real users, a Dara on each side.
 
-The inviter names the invitee (by username) and a topic → the invitee accepts →
-each party privately does intake with their own Dara → when both intakes are in
-(and safe) the two Daras mediate between each other → each party gets a private
-takeaway. State lives in conflict_sessions (RLS-locked to the two parties), so
-it persists across refreshes and devices. No single-device demo: mediation is
-strictly between two registered users.
+Vibrant redesign: the two-Daras-meeting motif (theme_components.mediation_orbs)
+and the mint takeaway card replace plain text; intake/chat stay native.
 """
 
 from __future__ import annotations
@@ -15,6 +11,7 @@ import streamlit as st
 from dara import call_ai, conflicts, schemas
 from .common import current_tier, model_caption, rule
 from . import session
+from . import theme_components as tc
 
 _MEDIATION_TURNS_EACH = 3  # 6 Dara-to-Dara messages
 
@@ -252,8 +249,14 @@ def _session_view(client, me, uid, sid) -> None:
 def _intake(client, s, role) -> None:
     my_name = conflicts.name_of(s, role)
     other_name = conflicts.name_of(s, conflicts.other_role(role))
-    st.write("This part is private — only you and your Dara. When you're ready, Dara shares a "
-             "short summary with the other person's Dara, never your raw words.")
+
+    # The two-Daras motif + a private-intake note set the scene.
+    tc.mediation_orbs(a_name=f"{other_name}'s Dara", b_name=f"{my_name}'s Dara", topic=s["topic"])
+    tc.info_note(
+        "<strong>This part is private</strong> — only you and your Dara. When you're ready, "
+        "Dara shares a short summary with the other person's Dara, never your raw words.",
+        accent=tc.MINT,
+    )
 
     msgs = conflicts.side(s, role).get("messages") or []
     if not msgs:
@@ -309,10 +312,12 @@ def _render_results(s, role) -> None:
     my_take = (s.get("takeaways") or {}).get(role)
 
     if s["status"] == "mediating" and not my_take:
+        tc.mediation_orbs(a_name=f"{s['inviter_name']}'s Dara", b_name=f"{s['invitee_name']}'s Dara", topic=s["topic"])
         st.info("The two Daras are mediating now — check back in a moment "
                 "(tap ← Mediations and reopen to refresh).")
         return
 
+    tc.mediation_orbs(a_name=f"{s['inviter_name']}'s Dara", b_name=f"{s['invitee_name']}'s Dara", topic=s["topic"])
     st.subheader("How the Daras talked it through")
     for c in transcript:
         speaker = s["inviter_name"] if c.get("speaker") == "inviter" else s["invitee_name"]
@@ -320,6 +325,4 @@ def _render_results(s, role) -> None:
             st.markdown(f"**{speaker}'s Dara:** {c.get('content', '')}")
 
     if my_take:
-        st.subheader("Your takeaway")
-        with st.container(border=True):
-            st.write(my_take)
+        tc.takeaway(my_take)

@@ -34,10 +34,12 @@ _BRAND_CSS = """
   --dara-grad:linear-gradient(105deg,var(--dara-rose) 0%,var(--dara-iris) 100%);
 }
 
-/* Warm, glowing canvas */
-.stApp{
-  background:radial-gradient(120% 80% at 82% -10%,#FFF1F5 0%,#FFF8F4 46%,#F4EEFC 100%);
+/* Warm, glowing canvas — forced so it wins over Streamlit's theme colour,
+   which is why config.toml not being read no longer matters for the canvas. */
+.stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"]{
+  background:radial-gradient(120% 80% at 82% -10%,#FFF1F5 0%,#FFF8F4 46%,#F4EEFC 100%) !important;
 }
+[data-testid="stHeader"]{ background:transparent !important; }
 
 /* Body type everywhere */
 html, body, [class*="css"], .stMarkdown, p, li, label,
