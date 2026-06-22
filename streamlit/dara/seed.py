@@ -16,7 +16,7 @@ from typing import Any, Dict, List
 
 
 def _c(cid, name, gender, orientation, age, nationality, job, height_cm, bio,
-       interested_in, age_min, age_max, intent, portrait) -> Dict[str, Any]:
+       interested_in, age_min, age_max, intent, portrait, prompts=None, photo_url=None) -> Dict[str, Any]:
     return {
         "id": cid, "username": name.lower(), "is_seed": True,
         "basics": {
@@ -29,8 +29,9 @@ def _c(cid, name, gender, orientation, age, nationality, job, height_cm, bio,
                 "height_min_cm": 150, "height_max_cm": 205, "intent": intent,
             },
             "portrait": portrait,
+            "prompts": prompts or [],
         },
-        "_photos": [],
+        "_photos": ([{"signed_url": photo_url, "media_type": "image/jpeg"}] if photo_url else []),
     }
 
 
@@ -52,7 +53,14 @@ SEED_CANDIDATES: List[Dict[str, Any]] = [
             "ok but the dim sum near goodge street is genuinely transcendent",
         ],
         "vibe": "playful, a little eccentric, intellectual warmth",
-    }),
+    }, prompts=[
+        {"prompt": "My most controversial (harmless) opinion",
+         "answer": "deleuze is just vibes and everyone's too scared to say it"},
+        {"prompt": "I get way too excited about",
+         "answer": "the dim sum near goodge street. it is, and i mean this, transcendent"},
+        {"prompt": "Together, we could",
+         "answer": "argue about whether spongebob is secretly continental philosophy (he is)"},
+    ], photo_url="https://randomuser.me/api/portraits/women/68.jpg"),
     _c("seed_yuki", "Yuki", "Woman", "Straight", 27, "Japanese", "Freelance photographer", 162,
        "Photographer. Quiet most of the time, then suddenly not.",
        ["Men"], 26, 35, "Long-term relationship", {
@@ -70,7 +78,14 @@ SEED_CANDIDATES: List[Dict[str, Any]] = [
             "It's a little late tonight... maybe tomorrow?",
         ],
         "vibe": "quiet, composed, artistic",
-    }),
+    }, prompts=[
+        {"prompt": "My simple pleasures",
+         "answer": "Film grain, jazz on a rainy walk, a bookshop with creaky floors."},
+        {"prompt": "I'm looking for someone who",
+         "answer": "can sit in a comfortable silence without needing to fill it."},
+        {"prompt": "A fact about me that surprises people",
+         "answer": "I'm quiet until I'm not — then I won't stop talking about light."},
+    ], photo_url="https://randomuser.me/api/portraits/women/44.jpg"),
     _c("seed_priya", "Priya", "Woman", "Bisexual", 29, "British-Indian", "Human rights lawyer", 170,
        "Human rights lawyer. Cooks aggressively. Always traveling.",
        ["Men", "Women"], 27, 38, "Long-term relationship", {
@@ -88,7 +103,14 @@ SEED_CANDIDATES: List[Dict[str, Any]] = [
             "Saturday could work, yeah. Bring something to argue about.",
         ],
         "vibe": "warm, grounded, vibrant",
-    }),
+    }, prompts=[
+        {"prompt": "The way to my heart",
+         "answer": "Bring something to argue about and a willingness to lose gracefully."},
+        {"prompt": "I get way too excited about",
+         "answer": "the new Tamil place in Tooting. It's life-changing. I'm not exaggerating."},
+        {"prompt": "I'm looking for someone who",
+         "answer": "is substantial — has a life, has values, and shows up."},
+    ], photo_url="https://randomuser.me/api/portraits/women/65.jpg"),
     _c("seed_marcus", "Marcus", "Man", "Gay", 31, "British", "M&A analyst", 185,
        "Finance by day, novel-in-progress by night. Bad at sports.",
        ["Men"], 27, 40, "Long-term relationship", {
@@ -106,7 +128,14 @@ SEED_CANDIDATES: List[Dict[str, Any]] = [
             "Free Thursday. I'll even pretend to enjoy a walk.",
         ],
         "vibe": "composed, literary, quietly warm",
-    }),
+    }, prompts=[
+        {"prompt": "My ideal Sunday",
+         "answer": "Eighty pages of a very slow novel and an overambitious ragù."},
+        {"prompt": "I'm looking for someone who",
+         "answer": "has their own centre of gravity and still chooses to show up."},
+        {"prompt": "A fact about me that surprises people",
+         "answer": "Far more romantic than the day job would suggest."},
+    ], photo_url="https://randomuser.me/api/portraits/men/32.jpg"),
     _c("seed_daniel", "Daniel", "Man", "Straight", 30, "American", "Middle-school science teacher", 183,
        "Teaches science, plans road trips, terrible at sitting still.",
        ["Women"], 26, 38, "Long-term relationship", {
@@ -124,7 +153,14 @@ SEED_CANDIDATES: List[Dict[str, Any]] = [
             "down for a hike this weekend if the weather holds!",
         ],
         "vibe": "warm, wholesome, energetic",
-    }),
+    }, prompts=[
+        {"prompt": "I get way too excited about",
+         "answer": "a good farmers market on a Saturday. Yes it's cheesy. No I won't stop."},
+        {"prompt": "Two truths and a lie",
+         "answer": "I've visited 14 national parks; I can name every planet's moons; I'm great at sitting still."},
+        {"prompt": "Together, we could",
+         "answer": "plan a road trip with far too many snack stops and zero regrets."},
+    ], photo_url="https://randomuser.me/api/portraits/men/52.jpg"),
     _c("seed_sofia", "Sofia", "Woman", "Lesbian", 28, "Spanish", "Pastry chef", 166,
        "Pastry chef. Feeds everyone. Competitive about board games.",
        ["Women"], 25, 36, "Long-term relationship", {
@@ -142,7 +178,14 @@ SEED_CANDIDATES: List[Dict[str, Any]] = [
             "tell me your most controversial food opinion. i'll judge you gently",
         ],
         "vibe": "warm, vivid, spirited",
-    }),
+    }, prompts=[
+        {"prompt": "The way to my heart",
+         "answer": "Let me feed you. That's it. That's the whole way."},
+        {"prompt": "I get way too excited about",
+         "answer": "tarta de santiago and beating you, gently, at every board game."},
+        {"prompt": "My most controversial (harmless) opinion",
+         "answer": "tell me your worst food opinion. i'll judge you, but kindly. vale?"},
+    ], photo_url="https://randomuser.me/api/portraits/women/90.jpg"),
     _c("seed_kwame", "Kwame", "Man", "Bisexual", 33, "Ghanaian-British", "Architect", 188,
        "Architect. Sketches on everything. Long-suffering Arsenal fan.",
        ["Women", "Men"], 28, 40, "Long-term relationship", {
@@ -160,7 +203,14 @@ SEED_CANDIDATES: List[Dict[str, Any]] = [
             "free Sunday — there's a jazz thing in Peckham if you're curious",
         ],
         "vibe": "grounded, creative, quietly warm",
-    }),
+    }, prompts=[
+        {"prompt": "My simple pleasures",
+         "answer": "Redrawing a staircase nobody will notice. Jazz in Peckham on a Sunday."},
+        {"prompt": "A cause I care about",
+         "answer": "Good public space — cities should be kind to the people moving through them."},
+        {"prompt": "I'm looking for someone who",
+         "answer": "is building something of their own and lets me in on it."},
+    ], photo_url="https://randomuser.me/api/portraits/men/64.jpg"),
     _c("seed_river", "River", "Non-binary", "Queer", 27, "Canadian", "Illustrator", 172,
        "Illustrator. Adopts plants like pets. Draws on everything.",
        ["Everyone"], 23, 34, "Still figuring it out", {
@@ -178,7 +228,14 @@ SEED_CANDIDATES: List[Dict[str, Any]] = [
             "do you wanna go thrifting and judge strangers' old mugs with me :)",
         ],
         "vibe": "gentle, whimsical, creative",
-    }),
+    }, prompts=[
+        {"prompt": "A fact about me that surprises people",
+         "answer": "i adopt plants like pets and i'm not sorry about it"},
+        {"prompt": "Together, we could",
+         "answer": "go thrifting and gently judge strangers' old mugs :)"},
+        {"prompt": "I'm looking for someone who",
+         "answer": "is a little bit weird and very gentle"},
+    ], photo_url="https://randomuser.me/api/portraits/women/53.jpg"),
     _c("seed_hassan", "Hassan", "Man", "Straight", 35, "Egyptian", "ER doctor", 180,
        "ER doctor. Unflappable. Cooks when stressed, so there's always extra.",
        ["Women"], 28, 42, "Long-term relationship", {
@@ -196,7 +253,14 @@ SEED_CANDIDATES: List[Dict[str, Any]] = [
             "Tuesday works. I'll be the calm one who's secretly exhausted.",
         ],
         "vibe": "steady, warm, grounded",
-    }),
+    }, prompts=[
+        {"prompt": "My ideal Sunday",
+         "answer": "A long run, too much koshari, and a history podcast I'll narrate at you."},
+        {"prompt": "I'm looking for someone who",
+         "answer": "is steady and real. I get enough chaos at work."},
+        {"prompt": "A fact about me that surprises people",
+         "answer": "I cook when I'm stressed, so there is always, always extra."},
+    ], photo_url="https://randomuser.me/api/portraits/men/40.jpg"),
     _c("seed_lena", "Lena", "Woman", "Straight", 32, "German", "Investigative journalist", 171,
        "Investigative journalist. Asks too many questions. Soft for old films.",
        ["Men"], 29, 42, "Long-term relationship", {
@@ -214,7 +278,14 @@ SEED_CANDIDATES: List[Dict[str, Any]] = [
             "Argue with me about something real on Thursday. I'll buy the first round.",
         ],
         "vibe": "sharp, independent, quietly warm",
-    }),
+    }, prompts=[
+        {"prompt": "The way to my heart",
+         "answer": "Argue with me about something real. Bring evidence."},
+        {"prompt": "I get way too excited about",
+         "answer": "a slow European film. Bring snacks and patience; I'll defend it to the death."},
+        {"prompt": "A fact about me that surprises people",
+         "answer": "Sharp on the page, embarrassingly soft for old cinema."},
+    ], photo_url="https://randomuser.me/api/portraits/women/12.jpg"),
 ]
 
 
@@ -222,7 +293,9 @@ def seed_candidates() -> List[Dict[str, Any]]:
     """Deep-ish copies so callers can annotate without mutating the constants."""
     return [
         {**c, "basics": dict(c["basics"]),
+         "_photos": [dict(p) for p in c.get("_photos", [])],
          "profile": {**c["profile"], "portrait": dict(c["profile"]["portrait"]),
-                     "preferences": dict(c["profile"]["preferences"])}}
+                     "preferences": dict(c["profile"]["preferences"]),
+                     "prompts": [dict(pr) for pr in c["profile"].get("prompts", [])]}}
         for c in SEED_CANDIDATES
     ]
