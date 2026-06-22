@@ -1,0 +1,160 @@
+"""Browse mode: scroll through profiles yourself. When you like one, your Dara
+takes over and has the conversation — then you can connect. (The fully-automatic
+path is the interview → 'See who Dara found', where Dara also picks who.)
+"""
+
+from __future__ import annotations
+
+import streamlit as st
+
+from dara import matching, meets
+from . import session
+from .common import current_tier, go, rule
+
+
+def _client():
+    try:
+        return session.get_client() if session.current_user() else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def render() -> None:
+    st.markdown("##### Browse")
+    st.title("Find them *yourself*.")
+    rule()
+
+    client, me, uid = _client(), session.current_profile(), session.user_id()
+    if not (client and me and uid):
+        st.info("Sign in to browse people. Prefer to let Dara do it all? Start an interview from Home.")
+        return
+
+    if st.session_state.get("browse_result"):
+        _result(me)
+        return
+
+    pool = st.session_state.get("browse_pool")
+    if pool is None:
+        with st.spinner("Finding people who fit what you're looking for…"):
+            pool = matching.browse_candidates(client, me)
+        st.session_state["browse_pool"] = pool
+        st.session_state["browse_idx"] = 0
+
+    idx = st.session_state.get("browse_idx", 0)
+    if idx >= len(pool):
+        st.success("That's everyone for now.")
+        st.caption("Check back as more people join — or let Dara find someone for you via an interview.")
+        cols = st.columns(2)
+        if cols[0].button("Reload", use_container_width=True):
+            st.session_state.pop("browse_pool", None)
+            st.rerun()
+        if cols[1].button("Let Dara find someone →", type="primary", use_container_width=True):
+            go("interview")
+        return
+
+    cand = pool[idx]
+    st.caption(f"{idx + 1} of {len(pool)}")
+    _card(cand)
+
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("✕  Pass", use_container_width=True):
+            matching.record_pass(client, uid, cand.get("id"))
+            st.session_state["browse_idx"] = idx + 1
+            st.rerun()
+    with c2:
+        if st.button("♥  Like — let Dara talk", type="primary", use_container_width=True):
+            _like(me, cand)
+
+
+def _card(cand: dict) -> None:
+    basics = cand.get("basics") or {}
+    photos = cand.get("_photos") or []
+    photo_url = photos[0].get("signed_url") if photos else None
+    with st.container(border=True):
+        if photo_url:
+            st.image(photo_url, use_container_width=True)
+        name = basics.get("name", "Someone")
+        st.subheader(name + ("  ·  _test persona_" if cand.get("_source") == "seed" else ""))
+        bits = [str(basics[k]) for k in ("age", "job", "nationality") if basics.get(k)]
+        if bits:
+            st.caption("  ·  ".join(bits))
+        if basics.get("bio"):
+            st.write(basics["bio"])
+
+
+def _like(me: dict, cand: dict) -> None:
+    holder = st.empty()
+
+    def _on_turn(i, total, convo):
+        with holder.container():
+            st.caption(f"Your Daras are talking… {i}/{total}")
+            for m in convo:
+                is_me = m.get("speaker") == "me"
+                with st.chat_message("user" if is_me else "assistant", avatar=None if is_me else "✨"):
+                    st.write(m.get("content", ""))
+
+    result = matching.run_match(
+        me, cand, source=cand.get("_source", "real"),
+        tier=current_tier(), client=_client(), on_turn=_on_turn,
+    )
+    holder.empty()
+    st.session_state["browse_result"] = result
+    st.session_state["browse_idx"] = st.session_state.get("browse_idx", 0) + 1
+    st.rerun()
+
+
+def _result(me: dict) -> None:
+    match = st.session_state["browse_result"]
+    cand = match.get("candidate") or {}
+    cb = cand.get("basics") or {}
+    name = cb.get("name", "them")
+
+    st.subheader(f"You and {name}")
+    st.metric("Compatibility", f"{match.get('score', 0)}%",
+              help="Dara's verdict after the two Daras talked.")
+    if match.get("verdict"):
+        st.write(match["verdict"])
+    for r in match.get("reasons") or []:
+        st.write(f"• {r}")
+
+    transcript = match.get("transcript") or []
+    if transcript:
+        me_name = match.get("me_name", "You")
+        with st.expander(f"Read how your Daras talked · {len(transcript)} messages"):
+            for m in transcript:
+                who = me_name if m.get("speaker") == "me" else name
+                st.markdown(f"**{who}:** {m.get('content', '')}")
+
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("Connect →", type="primary", use_container_width=True):
+            _connect(me, match)
+    with c2:
+        if st.button("Keep browsing", use_container_width=True):
+            st.session_state.pop("browse_result", None)
+            st.rerun()
+
+
+def _connect(me: dict, match: dict) -> None:
+    cand = match.get("candidate") or {}
+    name = (cand.get("basics") or {}).get("name", "them")
+    match_data = {
+        "transcript": match.get("transcript") or [], "score": match.get("score"),
+        "verdict": match.get("verdict"), "reasons": match.get("reasons") or [],
+    }
+    if match.get("source") == "real" and meets.is_real_user_id(cand.get("id")):
+        client = _client()
+        res = meets.connect(client, me, cand, match_data=match_data)
+        st.session_state.pop("browse_result", None)
+        if res.get("matched"):
+            go("matches")
+        else:
+            st.success(f"Connect request sent to {name}. You'll match if they accept.")
+        return
+    # seed / test persona → auto-match + AI persona chat
+    sm = st.session_state.setdefault("seed_matches", {})
+    cid = cand.get("id") or f"seed_{cand.get('username', 'x')}"
+    sm.setdefault(cid, {"candidate": cand, "messages": []})
+    st.session_state.pop("browse_result", None)
+    go("matches")
