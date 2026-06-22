@@ -162,7 +162,9 @@ def _person_brief(client, card: dict):
     """(basics, photo_url) for a match card — fetched for real users, taken from
     the candidate for seed personas (which have no photos)."""
     if card.get("kind") == "seed":
-        return (card.get("candidate") or {}).get("basics") or {}, None
+        cand = card.get("candidate") or {}
+        photos = cand.get("_photos") or []
+        return cand.get("basics") or {}, (photos[0].get("signed_url") if photos else None)
     basics, photo_url = {}, None
     oid = card.get("other_id")
     if client and oid:
