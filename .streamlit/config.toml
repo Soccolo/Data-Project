@@ -1,0 +1,13 @@
+[theme]
+# Dara — vibrant redesign palette.
+# Two colours meeting in the middle (matchmaking + mediation). The rose→iris
+# gradient itself lives in CSS (flows/common.py); these are the solid anchors
+# Streamlit uses for widgets, focus rings, sliders, and surfaces.
+primaryColor = "#6D5EF6"             # iris — interactive accent / focus rings
+backgroundColor = "#FFF8F4"          # warm cream canvas
+secondaryBackgroundColor = "#F4ECFB" # soft lilac for cards, sidebar, inputs
+textColor = "#1B1430"                # deep plum ink
+font = "sans serif"
+
+[client]
+showErrorDetails = true
