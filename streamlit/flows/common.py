@@ -228,6 +228,8 @@ def sidebar() -> None:
             st.divider()
             if st.button("✦  Home", use_container_width=True):
                 go("home")
+            if st.button("🔥  Browse", use_container_width=True):
+                go("browse")
             if st.button("💬  Matches", use_container_width=True):
                 go("matches")
             if st.button("👤  Account", use_container_width=True):
