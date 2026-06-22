@@ -52,6 +52,26 @@ MEDIATION: Dict[str, Any] = {
     "required": ["messages"],
 }
 
+# In-chat Dara help: a few message options the user can send, each with a short
+# label describing its angle ("Playful", "Ask about her work", "Suggest coffee").
+SUGGESTIONS: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "suggestions": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "label": {"type": "string"},
+                    "text": {"type": "string"},
+                },
+                "required": ["text"],
+            },
+        },
+    },
+    "required": ["suggestions"],
+}
+
 # Personality portrait distilled from the interview. Mirrors the shape of the
 # seed candidates' ``portrait`` so interviewed users and seeds are interchangeable
 # in the proxy step. ``speech_notes`` + ``recent_messages`` drive voice matching.
@@ -165,6 +185,23 @@ def normalize_messages(d: Any) -> List[str]:
 def normalize_physical(d: Any) -> Dict[str, Any]:
     d = d if isinstance(d, dict) else {}
     return {"meets": bool(d.get("meets", True)), "reason": str(d.get("reason") or "").strip()}
+
+
+def normalize_suggestions(d: Any) -> List[Dict[str, str]]:
+    items = d.get("suggestions") if isinstance(d, dict) else d
+    if not isinstance(items, list):
+        items = []
+    out: List[Dict[str, str]] = []
+    for it in items:
+        if isinstance(it, str):
+            text, label = it, ""
+        elif isinstance(it, dict):
+            text, label = str(it.get("text") or "").strip(), str(it.get("label") or "").strip()
+        else:
+            continue
+        if text:
+            out.append({"label": label, "text": text})
+    return out[:3]
 
 
 def normalize_proxy(d: Any) -> str:
