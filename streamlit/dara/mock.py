@@ -157,6 +157,16 @@ def mock_response(
             })
         return "Warm, candid, outdoorsy. Reads as approachable and a little adventurous."
 
+    if purpose == "chatAssist":
+        return json.dumps({"suggestions": [
+            {"label": "Warm & curious",
+             "text": "okay your bio made me smile — what's the story behind it?"},
+            {"label": "Find common ground",
+             "text": "i feel like we'd get along over good coffee. how's your week going?"},
+            {"label": "Suggest meeting",
+             "text": "this is fun — want to grab a coffee sometime this week?"},
+        ]})
+
     # Fallback
     return "…"
 
