@@ -1,4 +1,8 @@
-"""Account page: profile, photos, plan/billing, settings, and account deletion."""
+"""Account page: profile, photos, plan/billing, settings, and account deletion.
+
+Vibrant redesign: gradient plan cards (theme_components.plan_card); the rest
+inherits the theme (gradient title, themed forms/tabs/inputs/buttons).
+"""
 
 from __future__ import annotations
 
@@ -9,12 +13,13 @@ from dara import prefs as prefs_mod
 from dara import profile as profile_service
 from dara.tiers import TIER_INFO, TIER_ORDER
 from . import session
+from . import theme_components as tc
 from .common import go, render_portrait
 
 
 def render() -> None:
     prof = session.current_profile() or {}
-    st.markdown("##### Account")
+    st.markdown(f"##### {tc.wordmark()}", unsafe_allow_html=True)
     st.title(f"@{prof.get('username', '—')}")
 
     tab_profile, tab_prefs, tab_insights, tab_photos, tab_plan, tab_settings = st.tabs(
@@ -291,24 +296,28 @@ def _plan(prof: dict) -> None:
     for col, key in zip(cols, TIER_ORDER):
         info = TIER_INFO[key]
         with col:
-            with st.container(border=True):
-                st.markdown(f"**{info.name}**")
-                st.markdown(f"### {info.price}")
-                st.caption(info.blurb)
-                for perk in info.perks:
-                    st.write(f"• {perk}")
-                if key == current:
-                    st.button("Current plan", key=f"plan_{key}", disabled=True, use_container_width=True)
-                else:
-                    verb = "Switch to" if TIER_ORDER.index(key) < TIER_ORDER.index(current) else "Upgrade to"
-                    if st.button(f"{verb} {info.name}", key=f"plan_{key}", use_container_width=True):
-                        try:
-                            profile_service.set_tier(session.get_client(), session.user_id(), key)
-                            session.refresh_profile()
-                            st.toast(f"You're on {info.name} now.", icon="✨")
-                            st.rerun()
-                        except Exception as e:  # noqa: BLE001
-                            st.error(f"Couldn't change plan: {e}")
+            # The vibrant pricing card; Pro (middle tier) is highlighted.
+            st.markdown(
+                tc.plan_card(
+                    name=info.name, price=info.price, blurb=info.blurb, perks=info.perks,
+                    current=(key == current), highlight=(key == "pro" and key != current),
+                ),
+                unsafe_allow_html=True,
+            )
+            st.write("")
+            if key == current:
+                st.button("Current plan", key=f"plan_{key}", disabled=True, use_container_width=True)
+            else:
+                verb = "Switch to" if TIER_ORDER.index(key) < TIER_ORDER.index(current) else "Upgrade to"
+                btype = "primary" if key == "pro" else "secondary"
+                if st.button(f"{verb} {info.name}", key=f"plan_{key}", type=btype, use_container_width=True):
+                    try:
+                        profile_service.set_tier(session.get_client(), session.user_id(), key)
+                        session.refresh_profile()
+                        st.toast(f"You're on {info.name} now.", icon="✨")
+                        st.rerun()
+                    except Exception as e:  # noqa: BLE001
+                        st.error(f"Couldn't change plan: {e}")
 
     st.caption(
         "Billing is simulated for the PoC — switching plans takes effect instantly and "

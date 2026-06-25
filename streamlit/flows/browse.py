@@ -1,6 +1,8 @@
 """Browse mode: scroll through profiles yourself. When you like one, your Dara
 takes over and has the conversation — then you can connect. (The fully-automatic
 path is the interview → 'See who Dara found', where Dara also picks who.)
+
+Vibrant redesign: big profile card (theme_components.browse_card) + match reveal.
 """
 
 from __future__ import annotations
@@ -9,7 +11,8 @@ import streamlit as st
 
 from dara import matching, meets
 from . import session
-from .common import current_tier, go, rule
+from . import theme_components as tc
+from .common import current_tier, go
 
 
 def _client():
@@ -20,9 +23,9 @@ def _client():
 
 
 def render() -> None:
-    st.markdown("##### Browse")
-    st.title("Find them *yourself*.")
-    rule()
+    tc.hero(f'Find them {tc.grad_word("yourself")}.',
+            "Scroll through people who fit what you're looking for. Like one, and your Dara talks first.",
+            show_motif=False)
 
     client, me, uid = _client(), session.current_profile(), session.user_id()
     if not (client and me and uid):
@@ -81,20 +84,16 @@ def _card(cand: dict) -> None:
     basics = cand.get("basics") or {}
     photos = cand.get("_photos") or []
     photo_url = photos[0].get("signed_url") if photos else None
-    with st.container(border=True):
-        if photo_url:
-            st.image(photo_url, use_container_width=True)
-        name = basics.get("name", "Someone")
-        st.subheader(name + ("  ·  _test persona_" if cand.get("_source") == "seed" else ""))
-        bits = [str(basics[k]) for k in ("age", "job", "nationality") if basics.get(k)]
-        if bits:
-            st.caption("  ·  ".join(bits))
-        if basics.get("bio"):
-            st.write(basics["bio"])
-        for pr in (cand.get("profile") or {}).get("prompts") or []:
-            if pr.get("answer"):
-                st.markdown(f"**{pr.get('prompt', '')}**")
-                st.write(pr["answer"])
+    meta = "  ·  ".join(str(basics[k]) for k in ("age", "job", "nationality") if basics.get(k))
+    prompts = [pr for pr in ((cand.get("profile") or {}).get("prompts") or []) if pr.get("answer")]
+    tc.browse_card(
+        name=basics.get("name", "Someone"),
+        meta=meta,
+        bio=basics.get("bio", ""),
+        prompts=prompts,
+        photo_url=photo_url,
+        badge="✦ Test persona" if cand.get("_source") == "seed" else "",
+    )
 
 
 def _direct_connect(me: dict, cand: dict) -> None:
@@ -122,6 +121,7 @@ def _like(me: dict, cand: dict) -> None:
 
     def _on_turn(i, total, convo):
         with holder.container():
+            tc.mediation_orbs(a_name="Your Dara", b_name="Their Dara")
             st.caption(f"Your Daras are talking… {i}/{total}")
             for m in convo:
                 is_me = m.get("speaker") == "me"
@@ -143,14 +143,15 @@ def _result(me: dict) -> None:
     cand = match.get("candidate") or {}
     cb = cand.get("basics") or {}
     name = cb.get("name", "them")
+    photos = cand.get("_photos") or []
+    photo_url = photos[0]["signed_url"] if (photos and photos[0].get("signed_url")) else None
 
-    st.subheader(f"You and {name}")
-    st.metric("Compatibility", f"{match.get('score', 0)}%",
-              help="Dara's verdict after the two Daras talked.")
-    if match.get("verdict"):
-        st.write(match["verdict"])
-    for r in match.get("reasons") or []:
-        st.write(f"• {r}")
+    meta = "  ·  ".join(str(cb[k]) for k in ("age", "job", "nationality") if cb.get(k))
+    tc.match_reveal(
+        name=name, meta=meta, score=match.get("score", 0),
+        verdict=match.get("verdict", ""), reasons=match.get("reasons", []),
+        photo_url=photo_url,
+    )
 
     transcript = match.get("transcript") or []
     if transcript:

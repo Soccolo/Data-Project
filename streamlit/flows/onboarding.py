@@ -5,6 +5,8 @@
 
 Only finishing step 3 flips the ``onboarded`` flag, so the router keeps the
 user here until they're done. Earlier steps persist as they go.
+
+Vibrant redesign: orb hero + themed step pills; forms stay native.
 """
 
 from __future__ import annotations
@@ -16,7 +18,8 @@ import streamlit as st
 from dara import prefs as prefs_mod
 from dara import profile as profile_service
 from . import session
-from .common import WORDMARK, rule, steps
+from . import theme_components as tc
+from .common import steps
 
 _KINDS = {
     "dating": "Dating — find someone new",
@@ -27,10 +30,11 @@ _STEPS = ["About you", "Preferences", "Photos"]
 
 
 def render() -> None:
-    st.markdown(f"##### {WORDMARK}")
-    st.title("Build your *profile*.")
-    rule()
-    st.write("A few details so Dara knows who it's speaking for, and who to look for.")
+    tc.hero(
+        f'Build your {tc.grad_word("profile")}.',
+        "A few details so Dara knows who it's speaking for, and who to look for.",
+        show_motif=False,
+    )
 
     step = st.session_state.setdefault("ob_step", 1)
     steps(step, _STEPS)

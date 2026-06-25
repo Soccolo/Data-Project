@@ -1,4 +1,4 @@
-"""Email + password sign-in / sign-up screen."""
+"""Email + password sign-in / sign-up screen. Vibrant redesign: orb hero."""
 
 from __future__ import annotations
 
@@ -6,13 +6,14 @@ import streamlit as st
 
 from dara import auth as auth_service
 from . import session
-from .common import WORDMARK
+from . import theme_components as tc
 
 
 def render() -> None:
-    st.markdown(f"##### {WORDMARK}")
-    st.title("Welcome to *Dara*.")
-    st.caption("AI matchmaker and mediator.")
+    tc.hero(
+        f'Welcome to {tc.grad_word("Dara")}.',
+        "Your AI matchmaker and mediator — it meets people for you, and hears both sides for you.",
+    )
 
     tab_in, tab_up, tab_reset = st.tabs(["Sign in", "Create account", "Forgot password"])
 

@@ -245,6 +245,84 @@ def takeaway(text: str, title: str = "Your takeaway") -> None:
     )
 
 
+def browse_card(name, meta="", bio="", prompts=None, photo_url=None, badge="") -> None:
+    """Large browse profile card: photo header, name overlay, bio, prompt Q&As."""
+    prompts = prompts or []
+    badge_html = (
+        f'<div style="position:absolute;right:14px;top:14px;background:rgba(255,255,255,.18);'
+        "backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.4);border-radius:999px;"
+        f'padding:5px 12px;color:#fff;font-size:12px;font-weight:700;">{_esc(badge)}</div>'
+        if badge else ""
+    )
+    name_meta = (
+        f'<div style="position:absolute;left:22px;bottom:16px;color:#fff;text-shadow:0 2px 10px rgba(0,0,0,.45);">'
+        f'<div style="font-family:{_FR};font-weight:700;font-size:28px;">{_esc(name)}</div>'
+        + (f'<div style="font-family:{_HK};font-size:14px;opacity:.92;">{_esc(meta)}</div>' if meta else "")
+        + "</div>"
+    )
+    prompt_html = ""
+    for pr in prompts:
+        q, a = pr.get("prompt", ""), pr.get("answer", "")
+        if not a:
+            continue
+        prompt_html += (
+            '<div style="border-top:1px solid rgba(109,94,246,.1);padding:12px 0 0;margin-top:12px;">'
+            f'<div style="font-family:{_HK};font-size:12px;font-weight:700;letter-spacing:.04em;'
+            f'text-transform:uppercase;color:{IRIS};margin-bottom:3px;">{_esc(q)}</div>'
+            f'<div style="font-family:{_FR};font-weight:500;font-size:18px;line-height:1.35;color:{INK};">{_esc(a)}</div></div>'
+        )
+    bio_html = (
+        f'<p style="font-family:{_HK};font-size:15px;line-height:1.55;color:#4A4364;margin:0;">{_esc(bio)}</p>'
+        if bio else ""
+    )
+    _md(
+        '<div style="border:1px solid rgba(109,94,246,.14);border-radius:22px;overflow:hidden;'
+        'background:#fff;box-shadow:0 22px 54px -32px rgba(31,22,51,.45);margin-bottom:12px;">'
+        f'<div style="position:relative;">{_photo_block(photo_url, 300, "their photos")}'
+        '<div style="position:absolute;left:0;right:0;bottom:0;height:110px;'
+        'background:linear-gradient(to top,rgba(27,20,48,.66),transparent);"></div>'
+        f"{badge_html}{name_meta}</div>"
+        f'<div style="padding:18px 20px;">{bio_html}{prompt_html}</div></div>'
+    )
+
+
+def plan_card(name, price, blurb, perks=None, current=False, highlight=False) -> str:
+    """Pricing tier card (returns HTML — render a column of these). The native
+    upgrade button goes beneath it."""
+    perks = perks or []
+    if highlight:
+        bg, title_c, body_c, perk_c, border = GRAD, "#fff", "rgba(255,255,255,.9)", "rgba(255,255,255,.95)", "transparent"
+        shadow = "0 26px 56px -24px rgba(124,80,180,.6)"
+    elif current:
+        bg, title_c, body_c, perk_c, border = "#fff", INK, MUTED, "#4A4364", IRIS
+        shadow = "0 16px 40px -28px rgba(31,22,51,.5)"
+    else:
+        bg, title_c, body_c, perk_c, border = "#fff", INK, MUTED, "#4A4364", "rgba(109,94,246,.14)"
+        shadow = "0 16px 40px -28px rgba(31,22,51,.5)"
+    perks_html = "".join(
+        f'<div style="display:flex;gap:8px;margin-bottom:6px;font-family:{_HK};font-size:14px;'
+        f'line-height:1.45;color:{perk_c};"><span style="color:{MINT if not highlight else "#fff"};'
+        f'font-weight:800;">&#10003;</span><span>{_esc(p)}</span></div>'
+        for p in perks
+    )
+    tag = (
+        '<div style="position:absolute;right:14px;top:14px;font-family:'
+        f'{_HK};font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;'
+        'background:rgba(255,255,255,.22);color:#fff;padding:4px 9px;border-radius:999px;">Popular</div>'
+        if highlight else ""
+    )
+    return (
+        f'<div style="position:relative;background:{bg};border:1px solid {border};border-radius:20px;'
+        f'padding:24px 22px;box-shadow:{shadow};height:100%;">'
+        f"{tag}"
+        f'<div style="font-family:{_HK};font-weight:800;font-size:14px;letter-spacing:.04em;'
+        f'text-transform:uppercase;color:{title_c};opacity:.85;">{_esc(name)}</div>'
+        f'<div style="font-family:{_FR};font-weight:900;font-size:42px;color:{title_c};margin:6px 0 2px;">{_esc(price)}</div>'
+        f'<div style="font-family:{_HK};font-size:13px;color:{body_c};margin-bottom:16px;">{_esc(blurb)}</div>'
+        f"{perks_html}</div>"
+    )
+
+
 def info_note(text: str, accent: str = MINT) -> None:
     _md(
         f'<div style="background:#fff;border:1px solid {accent}44;border-left:4px solid {accent};'
